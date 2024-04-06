@@ -1,0 +1,196 @@
+---
+title: "Age distribution of HFMD"
+format: 
+  html:
+    page-layout: full
+editor: visual
+echo: true
+---
+
+Data
+
+```{r,message=FALSE,warning=FALSE}
+library(readxl)
+library(lubridate)
+library(ggplot2)
+library(cowplot)
+library(tidyverse)
+library(ggsci)
+df <- read_excel("D:/OUCRU/hfmd/data/2023_W52_TCM__DANHSACH.xlsx")
+colnames(df) <- c("stt", "dob", "sex", "district", "commune", 
+                  "inout", "onset_date", "adm_date")
+df$dob <- dmy(df$dob)
+df$adm_date <- dmy(df$adm_date)
+time_step <- "week"
+df$adm_time <- as.Date(floor_date(df$adm_date, time_step))
+
+df$age <- trunc((df$dob %--% df$adm_date) / years(1))
+
+agegr_cut <- c(0, 3, 5, 10, 15, Inf)
+df$agegr <- cut(df$age, breaks = agegr_cut, right = F)
+df$agegr <- factor(df$agegr, labels = c("0-3", "3-5", "5-10", "10-15", "15+"))
+```
+
+Full period
+
+```{r,echo=FALSE}
+df_plot <- df %>% 
+  filter(!is.na(adm_time)) %>% 
+  count(adm_time)
+
+p <- ggplot(df_plot, aes(x = adm_time, y = n)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  labs(x = "Admission week", y = "Cases")
+fi_plot <- df %>%
+  filter((adm_time > as.Date("2023-05-07") & adm_time < as.Date("2023-09-03")&
+           !is.na(adm_time) & !is.na(age)))  %>% 
+  count(adm_time)
+se_plot <- df %>% 
+  filter((adm_time > as.Date("2023-09-03")) &
+           !is.na(adm_time) & !is.na(age)) %>% 
+  count(adm_time)
+
+p1 <- ggplot(fi_plot, aes(x = adm_time, y = n)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  labs(x = "Admission week", y = "Cases")
+
+p2 <- ggplot(se_plot, aes(x = adm_time, y = n)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  labs(x = "Admission week", y = "Cases")
+```
+
+
+```{r,echo=FALSE}
+p
+```
+
+::: columns
+::: {.column width="50%"}
+
+First peak
+```{r,echo=FALSE}
+p1
+```
+
+:::
+
+::: {.column width="50%"}
+
+Second peak
+
+```{r,echo=FALSE}
+p2
+```
+:::
+:::
+
+
+Second peak age distribution
+
+```{r}
+se_peak <- df %>%
+  filter((adm_time > as.Date("2023-09-03")) &
+           !is.na(adm_time) & !is.na(age)) 
+
+result_se <- se_peak %>%
+  reframe(
+    N  = n(),
+    Median = median(age, na.rm = T),
+    "25th" = quantile(age,na.rm = T,0.25),
+    "75th" = quantile(age,na.rm = T, 0.75),
+    min = min(age),
+    max = max(age))
+
+se_plot <- df %>% 
+  filter((adm_time > as.Date("2023-09-03")) &
+           !is.na(adm_time) & !is.na(age)) %>% 
+  count(age)
+
+se_dis <- ggplot(se_plot, aes(x = age, y = n)) +
+  geom_bar(stat = "identity") +
+  labs(y = "Cases")+
+  theme_minimal()
+
+```
+
+First peak age distribution 
+
+```{r}
+fi_peak <- df %>%
+  filter((adm_time > as.Date("2023-05-07") & adm_time < as.Date("2023-09-03")&
+           !is.na(adm_time) & !is.na(age))) 
+
+result_fi <- fi_peak %>%
+  reframe(
+    N  = n(),
+    Median = median(age, na.rm = T),
+    "25th" = quantile(age,na.rm = T,0.25),
+    "75th" = quantile(age,na.rm = T, 0.75),
+    min = min(age),
+    max = max(age))
+
+fi_plot <- df %>%
+  filter((adm_time > as.Date("2023-05-07") & adm_time < as.Date("2023-09-03")&
+           !is.na(adm_time) & !is.na(age)))  %>% 
+  count(age)
+
+fi_dis <- ggplot(fi_plot, aes(x = age, y = n)) +
+  geom_bar(stat = "identity") +
+  labs(y = "Cases")+
+  theme_minimal()
+
+plot_grid(fi_dis, se_dis, align = "v", nrow = 2, rel_heights = c(1/2, 1/2))
+list("1st_peak" = result_fi,
+     "2nd_peak" = result_se)
+
+         
+```
+
+
+Full first peak
+
+```{r,echo=FALSE}
+fi2_plot <- df %>%
+  filter((adm_time < as.Date("2023-09-03")&
+           !is.na(adm_time) & !is.na(age)))  %>% 
+  count(adm_time)
+
+ggplot(fi2_plot, aes(x = adm_time, y = n)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  labs(x = "Admission week", y = "Cases")
+```
+
+
+Full first peak age distribution
+
+```{r}
+fi2_peak <- df %>%
+  filter((adm_time < as.Date("2023-09-03")&
+           !is.na(adm_time) & !is.na(age))) 
+
+result_fi2 <- fi2_peak %>%
+  reframe(
+    N  = n(),
+    Median = median(age, na.rm = T),
+    "25th" = quantile(age,na.rm = T,0.25),
+    "75th" = quantile(age,na.rm = T, 0.75),
+    min = min(age),
+    max = max(age))
+result_fi2
+fi2_plot <- df %>%
+  filter((adm_time < as.Date("2023-09-03")&
+           !is.na(adm_time) & !is.na(age)))  %>% 
+  count(age)
+
+fi2_dis <- ggplot(fi2_plot, aes(x = age, y = n)) +
+  geom_bar(stat = "identity") +
+  labs(y = "Cases")+
+  theme_minimal()
+fi2_dis
+
+```
+

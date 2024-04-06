@@ -81,7 +81,7 @@ data <- data.frame(
 )
 
 
-data %>%
+p <- data %>%
   ggplot( aes(x=age, fill=peak)) +
     geom_histogram( color="#e9ecef", alpha=0.6, position = 'identity') +
     scale_fill_manual(values=c("red", "royalblue")) +
@@ -90,11 +90,18 @@ data %>%
     labs(y = "Cases")
 
  
- colnames(result_fi) <-  c("Size","Median","25th","75th",
+colnames(result_fi) <-  c("Size","Median","25th","75th",
                                       "min","max","mean","sd")
- colnames(result_se) <-  c("Size","Median","25th","75th",
+colnames(result_se) <-  c("Size","Median","25th","75th",
                                       "min","max","mean","sd")
 ```
+
+Plot age distribution of 2 peaks
+
+```{r,warning=FALSE,message=FALSE}
+p
+```
+
 
 First peak
 ```{r,echo=FALSE}

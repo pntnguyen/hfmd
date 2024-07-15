@@ -1,0 +1,852 @@
+---
+title: "Modelling a two-peak hand, foot, and mouth disease outbreak caused by enterovirus A71 in Ho Chi Minh City, Vietnam in 2023."
+format: 
+  html:
+    page-layout: full
+    embed-resources: true
+knitr:
+  opts_chunk:
+    out.width: "100%"
+    out.height: "100%"
+editor: visual
+echo: false
+warning: false
+message: false
+---
+
+# HFMD data from 2017 - 2023
+
+```{r,warning=FALSE,message=FALSE}
+library(readxl)
+library(lubridate)
+library(ggplot2)
+library(cowplot)
+library(tidyverse)
+library(hrbrthemes)
+library(ggsci)
+library(patchwork)
+library(plotly)
+library(gtsummary)
+library(reshape2)
+# df <- read_excel("D:/OUCRU/hfmd/data/TCM v1.xlsx",
+#             col_types = c("numeric", "numeric", "numeric",
+#                           "date", "numeric", "text", "text",
+#                           "text", "date", "date", "text", "text"))
+# colnames(df) <- c("id", "idqh", "idpx","dob","age", "gender", "district",
+#                   "commune", "onset_date", "adm_date","inout","mabtt")
+
+TCM_full <- read_excel("D:/OUCRU/hfmd/data/TCM_full.xlsx", 
+    col_types = c("date", "numeric", "text", 
+        "text", "text", "date", "date", "date", 
+        "text", "text", "text"))
+colnames(TCM_full) <- c("dob", "age", "gender", "commune", "district",
+                  "reported_date", "onset_date","adm_date",
+                  "medi_cen","inout","severity")
+df1 <- TCM_full
+df1$dob <- df1$dob %>% as_date()
+df1$adm_date <- df1$adm_date %>% as_date()
+
+df1$age1 <- interval(df1$dob, df1$adm_date) / years(1)
+df1$adm_week <- as.Date(floor_date(df1$adm_date, "week"))
+df1$district <- df1$district %>% str_replace_all(
+          c( "Quận Gò vấp"  = "Quận Gò Vấp"))
+df1$district <- df1$district %>% 
+  str_remove("Quận|Huyện|Thành phố") %>%
+  trimws(which = "both") 
+```
+
+```{r}
+dfplot <- df1 %>%
+  filter(!is.na(adm_date) & !is.na(reported_date)) %>%
+  count(adm_date,reported_date,)
+```
+
+Time - series epidemic curve of HFMD in Ho Chi Minh from 2017 - 2023
+
+::: columns
+::: {.column width="50%"}
+```{r}
+ggplot(data = dfplot, aes(x = adm_date, y = n)) +
+  # geom_bar(stat = "identity") +
+  geom_line()+
+  theme_minimal() +
+  xlab("Admission date (day)")+
+  ylab("Cases")
+```
+:::
+
+::: {.column width="50%"}
+```{r}
+ggplot(data = dfplot, aes(x = reported_date, y = n)) +
+  # geom_bar(stat = "identity") +
+  geom_line()+
+  theme_minimal() +
+  xlab("Reported date (day)")+
+  ylab("Cases")
+```
+:::
+:::
+
+Epidemic curve of HFMD in Ho Chi Minh (you can double - click on the legend to display a specific year)
+
+```{r}
+hfmd23 <- df1 %>% filter(year(adm_date) == "2023") %>%
+  filter(!is.na(adm_date) ) %>%
+  count(adm_date)
+
+hfmd13 <- df1 %>% filter(year(adm_date) == "2013") %>%
+  filter(!is.na(adm_date) ) %>%
+  count(adm_date) 
+
+hfmd14 <- df1 %>% filter(year(adm_date) == "2014") %>%
+  filter(!is.na(adm_date) ) %>%
+  count(adm_date) 
+
+hfmd15 <- df1 %>% filter(year(adm_date) == "2015") %>%
+  filter(!is.na(adm_date) ) %>%
+  count(adm_date) 
+
+hfmd16 <- df1 %>% filter(year(adm_date) == "2016") %>%
+  filter(!is.na(adm_date) ) %>%
+  count(adm_date) 
+
+hfmd17 <- df1 %>% filter(year(adm_date) == "2017") %>%
+  filter(!is.na(adm_date) ) %>%
+  count(adm_date) 
+hfmd18 <- df1 %>% filter(year(adm_date) == "2018") %>%
+  filter(!is.na(adm_date) ) %>%
+  count(adm_date)
+hfmd19 <- df1 %>% filter(year(adm_date) == "2019") %>%
+  filter(!is.na(adm_date) ) %>%
+  count(adm_date)
+hfmd20 <- df1 %>% filter(year(adm_date) == "2020") %>%
+  filter(!is.na(adm_date) ) %>%
+  count(adm_date)
+hfmd21 <- df1 %>% filter(year(adm_date) == "2021") %>%
+  filter(!is.na(adm_date) ) %>%
+  count(adm_date)
+hfmd22 <- df1 %>% filter(year(adm_date) == "2022") %>%
+  filter(!is.na(adm_date) ) %>%
+  count(adm_date)
+
+p23 <- ggplot(data = hfmd23, aes(x = adm_date, y = n)) +
+  # geom_bar(stat = "identity")+
+  geom_line()+
+  xlab("Admission date (day)")+
+  ylab("Cases")+
+  theme_minimal()
+
+agdf <- rbind(hfmd13,hfmd14,hfmd15,hfmd16,
+              hfmd17,hfmd18,hfmd19,
+              hfmd20,hfmd21,hfmd22,
+              hfmd23)
+
+agdf$year <- year(agdf$adm_date)
+agdf$month <- month(agdf$adm_date)
+agdf$day <- day(agdf$adm_date)
+
+p1323 <- agdf %>% 
+  mutate(datetime = lubridate::make_datetime(2020, month, day)) %>% 
+  ggplot() +
+  geom_line(aes(x = datetime, y = n, colour = factor(year))) +
+  scale_x_datetime(breaks = lubridate::make_datetime(2020,1:12),labels = month.abb) +
+  ylab("Cases")+
+  xlab("Admission time") +
+  labs(title = "HFMD cases notification 2013 - 2023", colour = "Year")+
+  theme_minimal()
+```
+
+```{r}
+ggplotly(p1323)
+```
+
+# Age structure analysis
+
+To analyze age structure, we will look at the age distribution of cases as a function of time either continuous variable or binary variable (first peak and second peak), and space (commune or district).
+
+**Age distribution of cases as a function of binary time variable (first peak and second peak)**
+
+```{r}
+fi_peak <- df1 %>% filter(year(adm_date) == "2023") %>% 
+  filter((adm_date <= as.Date("2023-09-03")&
+            !is.na(adm_date) & !is.na(age1)))
+
+se_peak <- df1 %>% filter(year(adm_date) == "2023") %>% 
+  filter((adm_date > as.Date("2023-09-03")) &
+           !is.na(adm_date) & !is.na(age1))
+
+data <- data.frame(
+  peak = c( rep("1st peak",nrow(data.frame(se_peak$age1))),
+            rep("2nd peak",nrow(data.frame(fi_peak$age1)))),
+  age = c( fi_peak$age1, se_peak$age1 )
+)
+
+ad <- ggplot(data=data, aes(x=age, group=peak, fill=peak)) +
+  geom_density(adjust=1.5, alpha=.4) +
+  scale_fill_manual( values = c("red","blue")) +
+  xlim(0,15)+
+  theme_ipsum()
+```
+
+::: columns
+::: {.column width="50%"}
+```{r}
+(p23 + geom_vline(xintercept = as.Date("2023-09-03")))/
+  ad
+```
+:::
+
+::: {.column width="50%"}
+```{r}
+data %>% 
+tbl_summary(by = peak)
+```
+:::
+:::
+
+# Data description
+
+```{r}
+df1$gender <- df1$gender %>% str_replace_all(
+  c( "nam|NAM|Nam"  = "Male",
+     "nữ|NỮ|Nữ"  = "Female"))
+
+df1$inout <- df1$inout %>% str_replace_all(
+  c( "Chuyển viện"  = "Transfer",
+     "Điều trị nội trú"  = "Inpatient",
+     "Điều trị ngoại trú"  = "Outpatient",
+     "Ra viện" = "Discharge",
+     "Tình trạng khác" = "Others",
+     "Tử vong" = "Death"
+     ))
+
+df1 %>% mutate(year = year(adm_date)) %>% 
+  tbl_summary(by = year,
+              label = c(age1 ~ "Age",
+                        gender ~ "Gender",
+                        district ~ "District",
+                        inout ~ "Treatment"),
+              statistic = list(
+                age1 ~ "{median} ({p25}, {p75})",
+                c(gender,district,inout) ~ c( "{n} ({p}%)")
+              ),
+              missing = "no",
+              include = c(age1,gender,district,inout))  %>%
+  bold_labels()
+```
+
+**Age distribution of cases as a function of continuous time variable (first peak and second peak)**
+
+I did two types of analysis: heat map and sliding window (time-varying mean age and \[25th,75th\] quartile).
+
+```{r}
+slide_age <- function(time1,age1,w1,s1){
+  df1 <- data.frame(time1,age1) %>%                   ## line listing data frame
+    filter(!is.na(time1) & !is.na(age1)) %>%
+    arrange(time1)
+
+  a_df1 <- df1 %>% count(time1)                      ## aggregate data frame
+
+  total1 <- nrow(a_df1)
+  spots1 <- seq(from = 1, to = (total1 - w1 + 1), by = s1)
+
+  out_total <- data.frame()
+
+  for (i in 1:length(spots1)){
+    range1 <- data.frame(a_df1[spots1[i]:(spots1[i] + w1 - 1),1])
+    result1 <- df1$age1[df1$time1 >= range1[1,] & df1$time1 <= range1[w1,]]
+    out <- data.frame(date = rep(as.character(range1[ceiling(w1/2),]),length(result1)),
+                      age = result1)
+    out <- out[order(out$age),]
+    out_total <- rbind(out_total,out)
+  }
+  output <- list()
+  output$wdat <- out_total
+  output$adat <- out_total %>% count(date)
+  output$parms <- data.frame(w = w1,s =s1)
+  return(output)
+}
+```
+
+```{r}
+case_noti <- function(timee, agee,lab = FALSE){
+
+  dat <- data.frame(timee,agee) %>%
+    filter(!is.na(timee) & !is.na(agee)) %>%
+    count(timee)
+
+  ts <- ggplot(dat, aes(x =timee, y = n)) +
+    geom_bar(stat = "identity") +
+    labs(y = "Cases") +
+    theme_minimal()
+
+  if(lab == TRUE){
+    ts
+  } else {
+    ts + theme(axis.title.x = element_blank(),
+          axis.text.x = element_blank(),
+          axis.ticks.x = element_blank())
+  }
+
+}
+```
+
+```{r}
+tshm <- function(model,agelim) {
+  ts <- case_noti(model$wdat$date,model$wdat$age)
+  hm <- ggplot(data=model$wdat, aes(x=date, y=age)) +
+    stat_density(
+      aes(fill = after_stat(density)),
+      geom = "raster",
+      position = "identity"
+    )+
+    scale_fill_gradient(low="yellow", high="red")+
+    theme_minimal()+
+    scale_y_reverse(lim= rev(agelim))+
+    scale_x_discrete(guide = guide_axis(n.dodge = 2))+
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,size = 10))
+  ts/hm
+}
+```
+
+```{r}
+## sliding window function
+cacu_ci <- function(datfi,statsi,ci = NULL){
+  resui <- as.data.frame(matrix(0, ncol = length(statsi),
+                                nrow = 1))
+  colnames(resui) <- c(statsi)
+  for (i in 1:length(statsi)){
+
+    if(statsi[i] == "mean") {
+      resui[,i] <- mean(datfi)
+    } else {
+      resui[,i] <- quantile(datfi,na.rm = T,as.numeric(statsi[i]))
+    }
+
+    if(statsi[i] == "sd") {
+      resui[,i] <- sd(datfi)
+    }
+    if(statsi[i] == "median") {
+      resui[,i] <- median(datfi)
+    }
+  }
+
+  if(is.numeric(ci) == TRUE){
+    length(datfi)
+    se <- sd(datfi)/sqrt(length(datfi))
+    lwr <- mean(datfi) - qt(ci,length(datfi))*se
+    upr <- mean(datfi) + qt(ci,length(datfi))*se
+    resui <- resui %>% mutate(lwr = lwr,upr = upr)
+  }
+  return(resui)
+}
+
+slidi <- function(timee,agee,wa,sa,statsa,ci = NULL){
+
+
+  df3a <- data.frame(timee,agee) %>%              ## line listing data frame
+    filter(!is.na(timee) & !is.na(agee)) %>%
+    arrange(timee)
+
+  a_df3a <- df3a %>% count(timee)                ## aggregate data frame
+
+  totala <- nrow(a_df3a)
+  spotsa <- seq(from = 1, to = (totala - wa + 1), by = sa)
+
+  if(is.null(ci) == TRUE){
+    resulta <- as.data.frame(matrix(0, ncol = length(statsa), nrow = length(spotsa)))
+    colnames(resulta) <- c(statsa)
+  } else {
+    resulta <- as.data.frame(matrix(0, ncol = length(statsa)+2, nrow = length(spotsa)))
+    colnames(resulta) <- c(statsa,"lwr","upr")
+  }
+
+  for (i in 1:length(spotsa)){
+    rangea <- data.frame(a_df3a[spotsa[i]:(spotsa[i] + wa - 1),1])
+    age_for_cala <- df3a$agee[df3a$timee >= rangea[1,] & df3a$timee <= rangea[wa,]]
+    resulta[i,] <- cacu_ci(datf = age_for_cala, statsa,ci=ci)
+    resulta[i,"ngay"]  <- as.Date(rangea[ceiling(wa/2),])
+  }
+  return(resulta)
+}
+
+plot_sw <- function(model){
+  plt_da <- melt(model, id="ngay")
+  colnames(plt_da) <- c("time","stats","value")
+  ggplot(data=plt_da,
+         aes(x=time, y=value, colour=stats)) +
+    geom_line()+
+    theme_minimal()
+}
+```
+
+```{r}
+ca <- case_noti(timee = df1$adm_date,
+                agee =  df1$age1) 
+
+  # geom_vline(xintercept = as.Date("2023-09-03"))+
+  # xlim(as.Date("2022-12-31"),as.Date("2024-01-05"))
+
+out2222 <- slidi(timee = df1$adm_date,
+                 agee =  df1$age1,
+                 wa = 7, sa=1,
+                 statsa = c("0.25","0.5","0.75"))
+
+aa <- ggplotly(ca)
+age_dis <- ggplotly(plot_sw(out2222))
+```
+
+```{r}
+wwww <- slide_age(time1 = df1$adm_date,
+                  age1 =  df1$age1,
+                  w1 = 7, s1=7)
+
+hm1723 <- tshm(wwww, agelim = c(0,5)) + theme(axis.title.x = element_blank(),
+          axis.text.x = element_blank(),
+          axis.ticks.x = element_blank())
+```
+
+::: columns
+::: {.column width="50%"}
+Sliding window with width 7 days and step 1 days
+
+```{r}
+subplot(aa, age_dis,nrows = 2) 
+```
+:::
+
+::: {.column width="50%"}
+Heat map of age distribution (sliding window with 7-day width and 7-day step)
+
+```{r}
+hm1723
+```
+:::
+:::
+
+**Annual analysis**
+
+*2017*
+
+```{r}
+df17 <- df1 %>% filter(year(adm_date) == "2017")
+## sliding windown analysis
+ca17 <- case_noti(timee = df17$adm_date,
+                agee =  df17$age1) 
+
+  # geom_vline(xintercept = as.Date("2023-09-03"))+
+  # xlim(as.Date("2022-12-31"),as.Date("2024-01-05"))
+
+out17 <- slidi(timee = df17$adm_date,
+                 agee =  df17$age1,
+                 wa = 7, sa=1,
+                 statsa = c("0.25","0.5","0.75"))
+
+aa17 <- ggplotly(ca17)
+age_dis17 <- ggplotly(plot_sw(out17))
+
+## heat map analysis
+w17 <- slide_age(time1 = df17$adm_date,
+                  age1 =  df17$age1,
+                  w1 = 7, s1=7)
+
+```
+
+::: columns
+::: {.column width="50%"}
+Sliding window with width 7 days and step 1 days
+
+```{r}
+subplot(aa17, age_dis17,nrows = 2) 
+```
+:::
+
+::: {.column width="50%"}
+Heat map of age distribution (sliding window with 7-day width and 7-day step)
+
+```{r}
+tshm(w17, agelim = c(0,5)) 
+```
+:::
+:::
+
+*2018*
+
+```{r}
+df18 <- df1 %>% filter(year(adm_date) == "2018")
+## sliding windown analysis
+ca18 <- case_noti(timee = df18$adm_date,
+                agee =  df18$age1) 
+
+  # geom_vline(xintercept = as.Date("2023-09-03"))+
+  # xlim(as.Date("2022-12-31"),as.Date("2024-01-05"))
+
+out18 <- slidi(timee = df18$adm_date,
+                 agee =  df18$age1,
+                 wa = 7, sa=1,
+                 statsa = c("0.25","0.5","0.75"))
+
+aa18 <- ggplotly(ca18)
+age_dis18 <- ggplotly(plot_sw(out18))
+
+## heat map analysis
+w18 <- slide_age(time1 = df18$adm_date,
+                  age1 =  df18$age1,
+                  w1 = 7, s1=7)
+
+```
+
+::: columns
+::: {.column width="50%"}
+Sliding window with width 7 days and step 1 days
+
+```{r}
+subplot(aa18, age_dis18,nrows = 2) 
+```
+:::
+
+::: {.column width="50%"}
+Heat map of age distribution (sliding window with 7-day width and 7-day step)
+
+```{r}
+tshm(w18, agelim = c(0,5)) 
+```
+:::
+:::
+
+*2019*
+
+```{r}
+df19 <- df1 %>% filter(year(adm_date) == "2019")
+## sliding windown analysis
+ca19 <- case_noti(timee = df19$adm_date,
+                agee =  df19$age1) 
+
+  # geom_vline(xintercept = as.Date("2023-09-03"))+
+  # xlim(as.Date("2022-12-31"),as.Date("2024-01-05"))
+
+out19 <- slidi(timee = df19$adm_date,
+                 agee =  df19$age1,
+                 wa = 7, sa=1,
+                 statsa = c("0.25","0.5","0.75"))
+
+aa19 <- ggplotly(ca19)
+age_dis19 <- ggplotly(plot_sw(out19))
+
+## heat map analysis
+w19 <- slide_age(time1 = df19$adm_date,
+                  age1 =  df19$age1,
+                  w1 = 7, s1=7)
+
+```
+
+::: columns
+::: {.column width="50%"}
+Sliding window with width 7 days and step 1 days
+
+```{r}
+subplot(aa19, age_dis19,nrows = 2) 
+```
+:::
+
+::: {.column width="50%"}
+Heat map of age distribution (sliding window with 7-day width and 7-day step)
+
+```{r}
+tshm(w19, agelim = c(0,5)) 
+```
+:::
+:::
+
+*2020*
+
+```{r}
+df20 <- df1 %>% filter(year(adm_date) == "2020")
+## sliding windown analysis
+ca20 <- case_noti(timee = df20$adm_date,
+                agee =  df20$age1) 
+
+  # geom_vline(xintercept = as.Date("2023-09-03"))+
+  # xlim(as.Date("2022-12-31"),as.Date("2024-01-05"))
+
+out20 <- slidi(timee = df20$adm_date,
+                 agee =  df20$age1,
+                 wa = 7, sa=1,
+                 statsa = c("0.25","0.5","0.75"))
+
+aa20 <- ggplotly(ca20)
+age_dis20 <- ggplotly(plot_sw(out20))
+
+## heat map analysis
+w20 <- slide_age(time1 = df20$adm_date,
+                  age1 =  df20$age1,
+                  w1 = 7, s1=7)
+
+```
+
+::: columns
+::: {.column width="50%"}
+Sliding window with width 7 days and step 1 days
+
+```{r}
+subplot(aa20, age_dis20,nrows = 2) 
+```
+:::
+
+::: {.column width="50%"}
+Heat map of age distribution (sliding window with 7-day width and 7-day step)
+
+```{r}
+tshm(w20, agelim = c(0,5)) 
+```
+:::
+:::
+
+*2021*
+
+```{r}
+df21 <- df1 %>% filter(year(adm_date) == "2021")
+## sliding windown analysis
+ca21 <- case_noti(timee = df21$adm_date,
+                agee =  df21$age1) 
+
+  # geom_vline(xintercept = as.Date("2023-09-03"))+
+  # xlim(as.Date("2022-12-31"),as.Date("2024-01-05"))
+
+out21 <- slidi(timee = df21$adm_date,
+                 agee =  df21$age1,
+                 wa = 7, sa=1,
+                 statsa = c("0.25","0.5","0.75"))
+
+aa21 <- ggplotly(ca21)
+age_dis21 <- ggplotly(plot_sw(out21))
+
+## heat map analysis
+w21 <- slide_age(time1 = df21$adm_date,
+                  age1 =  df21$age1,
+                  w1 = 7, s1=7)
+
+```
+
+::: columns
+::: {.column width="50%"}
+Sliding window with width 7 days and step 1 days
+
+```{r}
+subplot(aa21, age_dis21,nrows = 2) 
+```
+:::
+
+::: {.column width="50%"}
+Heat map of age distribution (sliding window with 7-day width and 7-day step)
+
+```{r}
+tshm(w21, agelim = c(0,5)) 
+```
+:::
+:::
+
+*2022*
+
+```{r}
+df22 <- df1 %>% filter(year(adm_date) == "2022")
+## sliding windown analysis
+ca22 <- case_noti(timee = df22$adm_date,
+                agee =  df22$age1) 
+
+  # geom_vline(xintercept = as.Date("2023-09-03"))+
+  # xlim(as.Date("2022-12-31"),as.Date("2024-01-05"))
+
+out22 <- slidi(timee = df22$adm_date,
+                 agee =  df22$age1,
+                 wa = 7, sa=1,
+                 statsa = c("0.25","0.5","0.75"))
+
+aa22 <- ggplotly(ca22)
+age_dis22 <- ggplotly(plot_sw(out22))
+
+## heat map analysis
+w22 <- slide_age(time1 = df22$adm_date,
+                  age1 =  df22$age1,
+                  w1 = 7, s1=7)
+
+```
+
+::: columns
+::: {.column width="50%"}
+Sliding window with width 7 days and step 1 days
+
+```{r}
+subplot(aa22, age_dis22,nrows = 2) 
+```
+:::
+
+::: {.column width="50%"}
+Heat map of age distribution (sliding window with 7-day width and 7-day step)
+
+```{r}
+tshm(w22, agelim = c(0,5)) 
+```
+:::
+:::
+
+*2023*
+
+```{r}
+df23 <- df1 %>% filter(year(adm_date) == "2023")
+## sliding windown analysis
+ca23 <- case_noti(timee = df23$adm_date,
+                agee =  df23$age1) 
+
+  # geom_vline(xintercept = as.Date("2023-09-03"))+
+  # xlim(as.Date("2022-12-31"),as.Date("2024-01-05"))
+
+out23 <- slidi(timee = df23$adm_date,
+                 agee =  df23$age1,
+                 wa = 7, sa=1,
+                 statsa = c("0.25","0.5","0.75"))
+
+aa23 <- ggplotly(ca23)
+age_dis23 <- ggplotly(plot_sw(out23))
+
+## heat map analysis
+w23 <- slide_age(time1 = df23$adm_date,
+                  age1 =  df23$age1,
+                  w1 = 7, s1=7)
+
+```
+
+::: columns
+::: {.column width="50%"}
+Sliding window with width 7 days and step 1 days
+
+```{r}
+subplot(aa23, age_dis23,nrows = 2) 
+```
+:::
+
+::: {.column width="50%"}
+Heat map of age distribution (sliding window with 7-day width and 7-day step)
+
+```{r}
+tshm(w23, agelim = c(0,5)) 
+```
+:::
+:::
+
+## Spatial distribution
+
+```{r}
+spa_df <- df1[,c("district","adm_date","adm_week")] %>% na.omit()
+
+spa_df$day <- day(spa_df$adm_date)
+spa_df$month <- month(spa_df$adm_date)
+spa_df$year <- year(spa_df$adm_date)
+```
+
+```{r}
+qhage <- spa_df %>% 
+  filter(year == 2023) %>% group_by(year,month,day) %>%
+  count(district) %>% 
+  mutate(datetime = lubridate::make_datetime(2023, month,day)) %>% 
+  ggplot(aes(x = datetime, y = n)) + geom_line() +
+  scale_x_datetime(breaks = lubridate::make_datetime(2023,1:12),labels = month.abb)+
+  facet_wrap(~district)+
+  theme_minimal()+
+  xlab("Addmission date (day)")+
+  ylab("Cases")+
+  ylim(0,50)+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,size = 7))
+qhage
+```
+
+::: {.panel-tabset .nav-pills}
+## Plot
+
+```{r}
+library(janitor)  ## để có câu lệnh clean_names
+library(sf)
+library(stringi)
+map_path <- "D:/OUCRU/HCDC/project phân tích sero quận huyện/"
+
+vn_qh <- st_read(dsn = file.path(map_path, "gadm41_VNM.gpkg"), layer = "ADM_ADM_2")
+
+vn_qh1 <- vn_qh %>%
+  clean_names() %>%     ## cho thành chữ thường
+  filter(
+    str_detect(
+      name_1,
+      "Hồ Chí Minh"
+    )
+  )
+
+qhtp <- vn_qh1[-c(14,21),]
+
+
+qhtp$geom[qhtp$varname_2 == "Thu Duc"] <- vn_qh1[c("21","24","14"),] %>%
+  st_union()
+
+qhtp <- qhtp %>% st_cast("MULTIPOLYGON")
+
+qhtp$varname_2 <- stri_trans_general(qhtp$varname_2, "latin-ascii") %>%
+  tolower() %>%
+  str_remove("district") %>%
+  trimws(which = "both")
+
+qhtp$name_2 <- qhtp$name_2 %>% 
+  str_remove("Quận|Huyện") %>%
+  trimws(which = "both")
+
+
+fi_peak$district <- fi_peak$district %>% 
+  str_remove("Quận|Huyện") %>%
+  trimws(which = "both") 
+
+fi_peak_sd <- fi_peak %>% group_by(district) %>% 
+  count(district) %>% data.frame()
+
+
+
+se_peak$district <- se_peak$district %>% 
+  str_remove("Quận|Huyện") %>%
+  trimws(which = "both") 
+
+se_peak_sd <- se_peak %>% group_by(district) %>% 
+  count(district) %>% data.frame()
+
+dta2p <- left_join(fi_peak_sd,se_peak_sd, by = join_by(district == district ))
+colnames(dta2p) <- c("district","n1","n2")
+
+qh_2p <- left_join(qhtp,dta2p, by = join_by(name_2 == district ))
+
+spatial_dis1 <- qh_2p %>% ggplot() +
+  geom_sf(aes(fill = n1),show.legend = T)+
+  scale_fill_continuous(low="yellow", high="red",
+                        guide="colorbar",na.value="white")+
+   geom_sf_text(aes(label = name_2), size = 2)+
+  theme_void()+
+  ggtitle('First peak')
+
+spatial_dis2 <- qh_2p %>% ggplot() +
+  geom_sf(aes(fill = n2),show.legend = T)+
+  scale_fill_continuous(low="yellow", high="red",
+                        guide="colorbar",na.value="white")+
+   geom_sf_text(aes(label = name_2), size = 2)+
+  theme_void()+
+  ggtitle('Second peak')
+```
+
+```{r}
+spatial_dis1
+```
+
+```{r}
+spatial_dis2
+```
+
+## Data
+
+```{r}
+dta2p
+```
+:::

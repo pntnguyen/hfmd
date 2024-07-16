@@ -199,7 +199,8 @@ ad <- ggplot(data=data, aes(x=age, group=peak, fill=peak)) +
 ::: {.column width="50%"}
 ```{r}
 data %>% 
-tbl_summary(by = peak)
+tbl_summary(by = peak,
+            digits = list(all_continuous() ~ 3))
 ```
 :::
 :::

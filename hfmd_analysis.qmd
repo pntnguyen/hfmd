@@ -14,7 +14,7 @@ warning: false
 message: false
 ---
 
-# HFMD data from 2013 - 2023
+# HFMD data from 2017 - 2023
 
 ```{r,warning=FALSE,message=FALSE}
 library(readxl)
@@ -160,6 +160,38 @@ p1323 <- agdf %>%
 ggplotly(p1323)
 ```
 
+# Data description
+
+```{r}
+df1$gender <- df1$gender %>% str_replace_all(
+  c( "nam|NAM|Nam"  = "Male",
+     "nữ|NỮ|Nữ"  = "Female"))
+
+df1$inout <- df1$inout %>% str_replace_all(
+  c( "Chuyển viện"  = "Transfer",
+     "Điều trị nội trú"  = "Inpatient",
+     "Điều trị ngoại trú"  = "Outpatient",
+     "Ra viện" = "Discharge",
+     "Tình trạng khác" = "Others",
+     "Tử vong" = "Death"
+     ))
+
+df1 %>% mutate(year = year(adm_date)) %>% 
+  tbl_summary(by = year,
+              label = c(age1 ~ "Age",
+                        gender ~ "Gender",
+                        district ~ "District",
+                        inout ~ "Treatment"),
+              statistic = list(
+                age1 ~ "{median} ({p25}, {p75})",
+                c(gender,district,inout) ~ c( "{n} ({p}%)")
+              ),
+              missing = "no",
+              include = c(age1,gender,district,inout))  %>%
+  bold_labels()
+```
+
+
 # Age structure analysis
 
 To analyze age structure, we will look at the age distribution of cases as a function of time either continuous variable or binary variable (first peak and second peak), and space (commune or district).
@@ -205,38 +237,7 @@ tbl_summary(by = peak,
 :::
 :::
 
-# Data description
-
-```{r}
-df1$gender <- df1$gender %>% str_replace_all(
-  c( "nam|NAM|Nam"  = "Male",
-     "nữ|NỮ|Nữ"  = "Female"))
-
-df1$inout <- df1$inout %>% str_replace_all(
-  c( "Chuyển viện"  = "Transfer",
-     "Điều trị nội trú"  = "Inpatient",
-     "Điều trị ngoại trú"  = "Outpatient",
-     "Ra viện" = "Discharge",
-     "Tình trạng khác" = "Others",
-     "Tử vong" = "Death"
-     ))
-
-df1 %>% mutate(year = year(adm_date)) %>% 
-  tbl_summary(by = year,
-              label = c(age1 ~ "Age",
-                        gender ~ "Gender",
-                        district ~ "District",
-                        inout ~ "Treatment"),
-              statistic = list(
-                age1 ~ "{median} ({p25}, {p75})",
-                c(gender,district,inout) ~ c( "{n} ({p}%)")
-              ),
-              missing = "no",
-              include = c(age1,gender,district,inout))  %>%
-  bold_labels()
-```
-
-**Age distribution of cases as a function of continuous time variable (first peak and second peak)**
+**Age distribution of cases as a function of continuous time variable**
 
 I did two types of analysis: heat map and sliding window (time-varying mean age and \[25th,75th\] quartile).
 
@@ -735,6 +736,96 @@ tshm(w23, agelim = c(0,5))
 :::
 :::
 
+**Time-varying attack rate**
+
+```{r}
+## population data
+pop <- readRDS("D:/OUCRU/hfmd/data/count_dangky.rds")
+pop_a <- pop %>% group_by(birth_month, birth_year) %>%
+  summarise(n=sum(n)) %>% arrange(birth_year)
+
+colnames(pop_a) <- c("m","y","n")
+
+pop_a$dob <- str_c(pop_a$y,pop_a$m,sep = "-") %>% ym()
+```
+
+
+```{r}
+### function
+slid_atk <- function(time1,age1,
+                     w1,s1,
+                     dob,n,breaks){
+## data cases
+  df1 <- data.frame(time1,age1) %>%
+    filter(!is.na(time1) & !is.na(age1)) %>%
+    arrange(time1)
+  df1$ra <-  plyr::round_any(df1$age1,breaks)
+  a_df1 <- df1 %>% count(time1)
+
+## denominator
+  sus_pop <- data.frame(dob = dob, n = n)
+
+## sliding step
+  total1 <- nrow(a_df1)
+  spots1 <- seq(from = 1, to = (total1 - w1 + 1), by = s1)
+
+  out_total <- data.frame()
+
+  for (i in 1:length(spots1)){
+    range1 <- data.frame(a_df1[spots1[i]:(spots1[i] + w1 - 1),1])
+
+    result2 <- df1$ra[df1$time1 >= range1[1,] & df1$time1 <= range1[w1,]]
+    ar_out <- data.frame(table(result2))
+    ar_out$result2 <- as.numeric(as.character(ar_out$result2))
+    sus_pop$check <- interval(sus_pop$dob, range1[ceiling(w1/2),]) / years(1)
+    sus_pop$ra    <-  plyr::round_any(sus_pop$check,breaks)
+    fn_pop <- sus_pop %>% group_by(ra) %>%
+      summarise(n = sum(n))
+    fn_dat <- left_join(ar_out, fn_pop, by = join_by(result2 == ra))
+    fn_dat$atr <- fn_dat$Freq/fn_dat$n
+    fn_dat[is.na(fn_dat)] <- 0
+    fn_dat$date <- rep(as.character(range1[ceiling(w1/2),]),nrow(fn_dat))
+    out_total <- rbind(out_total,fn_dat)
+  }
+  return(out_total)
+}
+```
+
+```{r}
+## calculation
+tada <- slid_atk(
+  time1 = df23$adm_date,
+  age1 =  df23$age1,
+  w1 = 7,
+  s1=7,
+  dob = pop_a$dob,
+  n = pop_a$n,
+  breaks = 0.25)
+```
+
+```{r}
+## visualization
+atk <- ggplot(tada, aes(date, result2)) +
+  geom_raster(aes(fill = atr))+
+  scale_fill_gradient(low="yellow", high="red")+
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
+  scale_y_reverse(lim=c(5,0))+
+  ylab("age")
+wwww <- slide_age(time1 = df23$adm_date,
+                  age1 =  df23$age1,
+                  w1 = 7, s1=7)
+
+new <- tshm(wwww, agelim = c(0,5)) +
+theme(axis.title.x = element_blank(),
+                                    axis.text.x = element_blank(),
+                                    axis.ticks.x = element_blank())
+new/atk +
+  labs(x = "Time",
+       caption = paste("Window with width :", wwww$parms$w,"days, steps", wwww$parms$s ,"days"))
+```
+
+
 ## Spatial distribution
 
 ```{r}
@@ -797,7 +888,10 @@ qhtp$varname_2 <- stri_trans_general(qhtp$varname_2, "latin-ascii") %>%
 qhtp$name_2 <- qhtp$name_2 %>% 
   str_remove("Quận|Huyện") %>%
   trimws(which = "both")
-
+qhtp$nl_name_2 <- c("BC","BTân","BT","CG","CC","GV",
+                      "HM","NB","PN","1","10","11","12"
+                      ,"3","4","5","6","7","8","TB",
+                      "TP","TĐ")
 
 fi_peak$district <- fi_peak$district %>% 
   str_remove("Quận|Huyện") %>%
@@ -817,14 +911,41 @@ se_peak_sd <- se_peak %>% group_by(district) %>%
 
 dta2p <- left_join(fi_peak_sd,se_peak_sd, by = join_by(district == district ))
 colnames(dta2p) <- c("district","n1","n2")
+```
 
+```{r}
+## calculate attack rate
+# pop <- readRDS("D:/OUCRU/hfmd/data/count_dangky.rds")
+pop$district_reg <- pop$district_reg %>% str_replace_all(
+  c( "Quận 2|Quận 9"  = "Thủ Đức",
+      "Gò vấp"  = "Gò Vấp")) %>% str_remove("Quận|Huyện") %>%
+  trimws(which = "both")
+qh <- read_excel("D:/OUCRU/HCDC/project phân tích sero quận huyện/tenqh.xlsx")
+qh$qh  <- qh$qh %>%  str_remove_all("Quận") %>%
+  str_replace_all(
+    c("Gò vấp"  = "Gò Vấp")) %>%
+  trimws(which = "both")
+pop$check <- str_detect(pop$district_reg,regex(paste(qh$qh, collapse = "|")))
+dt <- pop %>%
+  filter(
+    str_detect(check,"TRUE")
+  )
+pop2 <- dt %>% group_by(district_reg) %>%
+  summarise(pop = sum(n)) %>% as.data.frame()
+pop2 <- pop2[-23,]
+dta2p <- left_join(dta2p,pop2, by = join_by(district == district_reg)) %>%
+    mutate(atk1 = n1/pop,
+           atk2 = n2/pop)
 qh_2p <- left_join(qhtp,dta2p, by = join_by(name_2 == district ))
+```
 
+```{r}
+## plot incidence
 spatial_dis1 <- qh_2p %>% ggplot() +
   geom_sf(aes(fill = n1),show.legend = T)+
   scale_fill_continuous(low="yellow", high="red",
                         guide="colorbar",na.value="white")+
-   geom_sf_text(aes(label = name_2), size = 2)+
+   geom_sf_text(aes(label = nl_name_2), size = 1.5)+
   theme_void()+
   ggtitle('First peak')
 
@@ -832,17 +953,40 @@ spatial_dis2 <- qh_2p %>% ggplot() +
   geom_sf(aes(fill = n2),show.legend = T)+
   scale_fill_continuous(low="yellow", high="red",
                         guide="colorbar",na.value="white")+
-   geom_sf_text(aes(label = name_2), size = 2)+
+   geom_sf_text(aes(label = nl_name_2), size = 1.5)+
+  theme_void()+
+  ggtitle('Second peak')
+## plot attack rate
+spatial_atk1 <- qh_2p %>% ggplot() +
+  geom_sf(aes(fill = atk1),show.legend = T)+
+  scale_fill_continuous(low="yellow", high="red",
+                        guide="colorbar",na.value="white")+
+   geom_sf_text(aes(label = nl_name_2), size = 1.5)+
+  theme_void()+
+  ggtitle('First peak')
+
+spatial_atk2 <- qh_2p %>% ggplot() +
+  geom_sf(aes(fill = atk2),show.legend = T)+
+  scale_fill_continuous(low="yellow", high="red",
+                        guide="colorbar",na.value="white")+
+   geom_sf_text(aes(label = nl_name_2), size = 1.5)+
   theme_void()+
   ggtitle('Second peak')
 ```
 
+
 ```{r}
-spatial_dis1
+spatial_dis1 + spatial_dis2 + 
+  plot_annotation(
+    title = "Incidence"
+  )
 ```
 
 ```{r}
-spatial_dis2
+spatial_atk1 + spatial_atk2 +
+  plot_annotation(
+    title = "Attack rate"
+  )
 ```
 
 ## Data

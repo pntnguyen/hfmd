@@ -191,7 +191,6 @@ df1 %>% mutate(year = year(adm_date)) %>%
   bold_labels()
 ```
 
-
 # Age structure analysis
 
 To analyze age structure, we will look at the age distribution of cases as a function of time either continuous variable or binary variable (first peak and second peak), and space (commune or district).
@@ -749,7 +748,6 @@ colnames(pop_a) <- c("m","y","n")
 pop_a$dob <- str_c(pop_a$y,pop_a$m,sep = "-") %>% ym()
 ```
 
-
 ```{r}
 ### function
 slid_atk <- function(time1,age1,
@@ -825,7 +823,6 @@ new/atk +
        caption = paste("Window with width :", wwww$parms$w,"days, steps", wwww$parms$s ,"days"))
 ```
 
-
 ## Spatial distribution
 
 ```{r}
@@ -849,11 +846,8 @@ qhage <- spa_df %>%
   ylab("Cases")+
   ylim(0,50)+
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,size = 7))
-qhage
 ```
 
-::: {.panel-tabset .nav-pills}
-## Plot
 
 ```{r}
 library(janitor)  ## để có câu lệnh clean_names
@@ -976,11 +970,126 @@ spatial_atk2 <- qh_2p %>% ggplot() +
 
 
 ```{r}
+census2019 <- readRDS("D:/OUCRU/hfmd/data/census2019.rds")
+
+hcm19 <- census2019 %>% filter(province == "Thành phố Hồ Chí Minh") 
+hcm19$district <- hcm19$district %>%  
+str_remove_all("Quận|Huyện") %>%
+  str_replace_all(
+    c("\\b2\\b|\\b9\\b"  = "Thủ Đức")) %>%
+  trimws(which = "both") 
+
+hcm19 <- hcm19 %>% 
+  group_by(district) %>% 
+  summarise(pop = sum(n)) %>% as.data.frame()
+```
+
+
+```{r}
+dta2p_2019 <- left_join(dta2p[,1:3],hcm19, by = join_by(district == district)) %>%
+    mutate(atk1 = n1/pop,
+           atk2 = n2/pop)
+qh_2p_2019 <- left_join(qhtp,dta2p_2019, by = join_by(name_2 == district ))
+```
+
+
+```{r}
+## plot attack rate
+spatial_atk191 <- qh_2p_2019 %>% ggplot() +
+  geom_sf(aes(fill = atk1),show.legend = T)+
+  scale_fill_continuous(low="yellow", high="red",
+                        guide="colorbar",na.value="white")+
+   geom_sf_text(aes(label = nl_name_2), size = 1.5)+
+  theme_void()+
+  ggtitle('First peak')
+
+spatial_atk192 <- qh_2p_2019 %>% ggplot() +
+  geom_sf(aes(fill = atk2),show.legend = T)+
+  scale_fill_continuous(low="yellow", high="red",
+                        guide="colorbar",na.value="white")+
+   geom_sf_text(aes(label = nl_name_2), size = 1.5)+
+  theme_void()+
+  ggtitle('Second peak')
+```
+
+
+```{r}
+df_atk <- spa_df %>% 
+  filter(year == 2023) %>% group_by(year,month,day) %>%
+  count(district) %>% 
+  mutate(datetime = lubridate::make_datetime(2023, month,day)) %>% as.data.frame()
+
+for ( i in 1:nrow(df_atk)){
+df_atk$pop[i] <- hcm19$pop[hcm19$district == df_atk$district[i]]
+}
+
+df_atk$atr <-  df_atk$n / df_atk$pop
+qh_atk <- df_atk %>% 
+  ggplot(aes(x = datetime, y = atr)) + geom_line() +
+  scale_x_datetime(breaks = lubridate::make_datetime(2023,1:12),labels = month.abb)+
+  facet_wrap(~district)+
+  theme_minimal()+
+  xlab("Addmission date (day)")+
+  ylab("Attack rate")+
+  # ylim(0,50)+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,size = 7))
+```
+
+
+
+
+## Incidence
+
+::: {.panel-tabset .nav-pills}
+
+## Plot
+
+```{r}
+qhage
+```
+
+## Map
+
+```{r}
 spatial_dis1 + spatial_dis2 + 
   plot_annotation(
     title = "Incidence"
   )
 ```
+
+:::
+
+## Attack rate Using population census 2019 data
+
+::: {.panel-tabset .nav-pills}
+
+## Plot
+
+```{r}
+qh_atk
+```
+
+## Map
+
+```{r}
+spatial_atk191 + spatial_atk192 + 
+  plot_annotation(
+    title = "Incidence"
+  )
+```
+
+## Data
+
+```{r}
+dta2p_2019
+```
+
+:::
+
+## Attack rate using data from vaccine registry (Hep B)
+::: {.panel-tabset .nav-pills}
+
+## Map
 
 ```{r}
 spatial_atk1 + spatial_atk2 +
@@ -995,3 +1104,6 @@ spatial_atk1 + spatial_atk2 +
 dta2p
 ```
 :::
+
+
+

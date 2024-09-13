@@ -1,9 +1,10 @@
 ---
-title: "Modelling a two-peak hand, foot, and mouth disease outbreak caused by enterovirus A71 in Ho Chi Minh City, Vietnam in 2023."
+title: "Modelling a two-peak enterovirus A71 outbreak caused in Ho Chi Minh City, Vietnam, in 2023."
 format: 
   html:
     page-layout: full
     embed-resources: true
+    toc: true
 knitr:
   opts_chunk:
     out.width: "100%"
@@ -13,6 +14,7 @@ echo: false
 warning: false
 message: false
 ---
+
 
 # HFMD data from 2017 - 2023
 
@@ -28,21 +30,15 @@ library(patchwork)
 library(plotly)
 library(gtsummary)
 library(reshape2)
-# df <- read_excel("D:/OUCRU/hfmd/data/TCM v1.xlsx",
-#             col_types = c("numeric", "numeric", "numeric",
-#                           "date", "numeric", "text", "text",
-#                           "text", "date", "date", "text", "text"))
-# colnames(df) <- c("id", "idqh", "idpx","dob","age", "gender", "district",
-#                   "commune", "onset_date", "adm_date","inout","mabtt")
+library(ggspatial)
 
-TCM_full <- read_excel("D:/OUCRU/hfmd/data/TCM_full.xlsx", 
+df1 <- read_excel("D:/OUCRU/hfmd/data/TCM_full.xlsx", 
     col_types = c("date", "numeric", "text", 
         "text", "text", "date", "date", "date", 
         "text", "text", "text"))
-colnames(TCM_full) <- c("dob", "age", "gender", "commune", "district",
+colnames(df1) <- c("dob", "age", "gender", "commune", "district",
                   "reported_date", "onset_date","adm_date",
                   "medi_cen","inout","severity")
-df1 <- TCM_full
 df1$dob <- df1$dob %>% as_date()
 df1$adm_date <- df1$adm_date %>% as_date()
 
@@ -149,7 +145,8 @@ p1323 <- agdf %>%
   mutate(datetime = lubridate::make_datetime(2020, month, day)) %>% 
   ggplot() +
   geom_line(aes(x = datetime, y = n, colour = factor(year))) +
-  scale_x_datetime(breaks = lubridate::make_datetime(2020,1:12),labels = month.abb) +
+  scale_x_datetime(breaks = lubridate::make_datetime(2020,1:12),
+                   labels = month.abb) +
   ylab("Cases")+
   xlab("Admission time") +
   labs(title = "HFMD cases notification 2013 - 2023", colour = "Year")+
@@ -191,13 +188,8 @@ df1 %>% mutate(year = year(adm_date)) %>%
   bold_labels()
 ```
 
-# Age structure analysis
-
-To analyze age structure, we will look at the age distribution of cases as a function of time either continuous variable or binary variable (first peak and second peak), and space (commune or district).
-
-**Age distribution of cases as a function of binary time variable (first peak and second peak)**
-
 ```{r}
+# Age structure analysis
 fi_peak <- df1 %>% filter(year(adm_date) == "2023") %>% 
   filter((adm_date <= as.Date("2023-09-03")&
             !is.na(adm_date) & !is.na(age1)))
@@ -218,27 +210,6 @@ ad <- ggplot(data=data, aes(x=age, group=peak, fill=peak)) +
   xlim(0,15)+
   theme_ipsum()
 ```
-
-::: columns
-::: {.column width="50%"}
-```{r}
-(p23 + geom_vline(xintercept = as.Date("2023-09-03")))/
-  ad
-```
-:::
-
-::: {.column width="50%"}
-```{r}
-data %>% 
-tbl_summary(by = peak,
-            digits = list(all_continuous() ~ 3))
-```
-:::
-:::
-
-**Age distribution of cases as a function of continuous time variable**
-
-I did two types of analysis: heat map and sliding window (time-varying mean age and \[25th,75th\] quartile).
 
 ```{r}
 slide_age <- function(time1,age1,w1,s1){
@@ -407,29 +378,9 @@ hm1723 <- tshm(wwww, agelim = c(0,5)) + theme(axis.title.x = element_blank(),
           axis.ticks.x = element_blank())
 ```
 
-::: columns
-::: {.column width="50%"}
-Sliding window with width 7 days and step 1 days
-
 ```{r}
-subplot(aa, age_dis,nrows = 2) 
-```
-:::
+#### 2017
 
-::: {.column width="50%"}
-Heat map of age distribution (sliding window with 7-day width and 7-day step)
-
-```{r}
-hm1723
-```
-:::
-:::
-
-**Annual analysis**
-
-*2017*
-
-```{r}
 df17 <- df1 %>% filter(year(adm_date) == "2017")
 ## sliding windown analysis
 ca17 <- case_noti(timee = df17$adm_date,
@@ -453,27 +404,9 @@ w17 <- slide_age(time1 = df17$adm_date,
 
 ```
 
-::: columns
-::: {.column width="50%"}
-Sliding window with width 7 days and step 1 days
-
 ```{r}
-subplot(aa17, age_dis17,nrows = 2) 
-```
-:::
+#### 2018
 
-::: {.column width="50%"}
-Heat map of age distribution (sliding window with 7-day width and 7-day step)
-
-```{r}
-tshm(w17, agelim = c(0,5)) 
-```
-:::
-:::
-
-*2018*
-
-```{r}
 df18 <- df1 %>% filter(year(adm_date) == "2018")
 ## sliding windown analysis
 ca18 <- case_noti(timee = df18$adm_date,
@@ -497,27 +430,9 @@ w18 <- slide_age(time1 = df18$adm_date,
 
 ```
 
-::: columns
-::: {.column width="50%"}
-Sliding window with width 7 days and step 1 days
-
 ```{r}
-subplot(aa18, age_dis18,nrows = 2) 
-```
-:::
+#### 2019
 
-::: {.column width="50%"}
-Heat map of age distribution (sliding window with 7-day width and 7-day step)
-
-```{r}
-tshm(w18, agelim = c(0,5)) 
-```
-:::
-:::
-
-*2019*
-
-```{r}
 df19 <- df1 %>% filter(year(adm_date) == "2019")
 ## sliding windown analysis
 ca19 <- case_noti(timee = df19$adm_date,
@@ -541,27 +456,9 @@ w19 <- slide_age(time1 = df19$adm_date,
 
 ```
 
-::: columns
-::: {.column width="50%"}
-Sliding window with width 7 days and step 1 days
-
 ```{r}
-subplot(aa19, age_dis19,nrows = 2) 
-```
-:::
+### 2020
 
-::: {.column width="50%"}
-Heat map of age distribution (sliding window with 7-day width and 7-day step)
-
-```{r}
-tshm(w19, agelim = c(0,5)) 
-```
-:::
-:::
-
-*2020*
-
-```{r}
 df20 <- df1 %>% filter(year(adm_date) == "2020")
 ## sliding windown analysis
 ca20 <- case_noti(timee = df20$adm_date,
@@ -585,27 +482,10 @@ w20 <- slide_age(time1 = df20$adm_date,
 
 ```
 
-::: columns
-::: {.column width="50%"}
-Sliding window with width 7 days and step 1 days
-
 ```{r}
-subplot(aa20, age_dis20,nrows = 2) 
-```
-:::
 
-::: {.column width="50%"}
-Heat map of age distribution (sliding window with 7-day width and 7-day step)
+### 2021
 
-```{r}
-tshm(w20, agelim = c(0,5)) 
-```
-:::
-:::
-
-*2021*
-
-```{r}
 df21 <- df1 %>% filter(year(adm_date) == "2021")
 ## sliding windown analysis
 ca21 <- case_noti(timee = df21$adm_date,
@@ -629,27 +509,9 @@ w21 <- slide_age(time1 = df21$adm_date,
 
 ```
 
-::: columns
-::: {.column width="50%"}
-Sliding window with width 7 days and step 1 days
-
 ```{r}
-subplot(aa21, age_dis21,nrows = 2) 
-```
-:::
+## 2022
 
-::: {.column width="50%"}
-Heat map of age distribution (sliding window with 7-day width and 7-day step)
-
-```{r}
-tshm(w21, agelim = c(0,5)) 
-```
-:::
-:::
-
-*2022*
-
-```{r}
 df22 <- df1 %>% filter(year(adm_date) == "2022")
 ## sliding windown analysis
 ca22 <- case_noti(timee = df22$adm_date,
@@ -673,27 +535,9 @@ w22 <- slide_age(time1 = df22$adm_date,
 
 ```
 
-::: columns
-::: {.column width="50%"}
-Sliding window with width 7 days and step 1 days
-
 ```{r}
-subplot(aa22, age_dis22,nrows = 2) 
-```
-:::
+## 2023
 
-::: {.column width="50%"}
-Heat map of age distribution (sliding window with 7-day width and 7-day step)
-
-```{r}
-tshm(w22, agelim = c(0,5)) 
-```
-:::
-:::
-
-*2023*
-
-```{r}
 df23 <- df1 %>% filter(year(adm_date) == "2023")
 ## sliding windown analysis
 ca23 <- case_noti(timee = df23$adm_date,
@@ -717,27 +561,9 @@ w23 <- slide_age(time1 = df23$adm_date,
 
 ```
 
-::: columns
-::: {.column width="50%"}
-Sliding window with width 7 days and step 1 days
-
 ```{r}
-subplot(aa23, age_dis23,nrows = 2) 
-```
-:::
+### Time-varying attack rate
 
-::: {.column width="50%"}
-Heat map of age distribution (sliding window with 7-day width and 7-day step)
-
-```{r}
-tshm(w23, agelim = c(0,5)) 
-```
-:::
-:::
-
-**Time-varying attack rate**
-
-```{r}
 ## population data
 pop <- readRDS("D:/OUCRU/hfmd/data/count_dangky.rds")
 pop_a <- pop %>% group_by(birth_month, birth_year) %>%
@@ -818,14 +644,10 @@ new <- tshm(wwww, agelim = c(0,5)) +
 theme(axis.title.x = element_blank(),
                                     axis.text.x = element_blank(),
                                     axis.ticks.x = element_blank())
-new/atk +
-  labs(x = "Time",
-       caption = paste("Window with width :", wwww$parms$w,"days, steps", wwww$parms$s ,"days"))
 ```
 
-## Spatial distribution
-
 ```{r}
+# Spatial distribution
 spa_df <- df1[,c("district","adm_date","adm_week")] %>% na.omit()
 
 spa_df$day <- day(spa_df$adm_date)
@@ -841,20 +663,22 @@ qhage <- spa_df %>%
   ggplot(aes(x = datetime, y = n)) + geom_line() +
   scale_x_datetime(breaks = lubridate::make_datetime(2023,1:12),labels = month.abb)+
   facet_wrap(~district)+
-  theme_minimal()+
+  theme_bw()+
   xlab("Addmission date (day)")+
   ylab("Cases")+
   ylim(0,50)+
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,size = 7))
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,size = 10),
+        axis.title.x = element_text(size = 15),
+        axis.title.y = element_text(size = 15))
 ```
 
-```{r}
+```{r,results = 'hide'}
 library(janitor)  ## để có câu lệnh clean_names
 library(sf)
 library(stringi)
 map_path <- "D:/OUCRU/HCDC/project phân tích sero quận huyện/"
 
-vn_qh <- st_read(dsn = file.path(map_path, "gadm41_VNM.gpkg"), layer = "ADM_ADM_2")
+vn_qh <- st_read(dsn = file.path(map_path,"gadm41_VNM.gpkg"), layer = "ADM_ADM_2")
 
 vn_qh1 <- vn_qh %>%
   clean_names() %>%     ## cho thành chữ thường
@@ -953,16 +777,18 @@ spatial_dis2 <- qh_2p %>% ggplot() +
 spatial_atk1 <- qh_2p %>% ggplot() +
   geom_sf(aes(fill = atk1),show.legend = T)+
   scale_fill_continuous(low="yellow", high="red",
-                        guide="colorbar",na.value="white")+
-   geom_sf_text(aes(label = nl_name_2), size = 1.5)+
+                        guide="colorbar",na.value="white",
+                        name = "Attack rate")+
+  geom_sf_text(aes(label = nl_name_2), size = 1.5)+
   theme_void()+
   ggtitle('First peak')
 
 spatial_atk2 <- qh_2p %>% ggplot() +
   geom_sf(aes(fill = atk2),show.legend = T)+
   scale_fill_continuous(low="yellow", high="red",
-                        guide="colorbar",na.value="white")+
-   geom_sf_text(aes(label = nl_name_2), size = 1.5)+
+                        guide="colorbar",na.value="white",
+                        name = "Attack rate")+
+  geom_sf_text(aes(label = nl_name_2), size = 1.5)+
   theme_void()+
   ggtitle('Second peak')
 ```
@@ -995,7 +821,9 @@ qh_2p_2019 <- left_join(qhtp,dta2p_2019, by = join_by(name_2 == district ))
 spatial_atk191 <- qh_2p_2019 %>% ggplot() +
   geom_sf(aes(fill = atk1),show.legend = T)+
   scale_fill_continuous(low="yellow", high="red",
-                        guide="colorbar",na.value="white")+
+                        guide="colorbar",na.value="white",
+                        name = "Attack rate",
+                        limits = c(0.001,0.007))+
    geom_sf_text(aes(label = nl_name_2), size = 1.5)+
   theme_void()+
   ggtitle('First peak')
@@ -1003,7 +831,9 @@ spatial_atk191 <- qh_2p_2019 %>% ggplot() +
 spatial_atk192 <- qh_2p_2019 %>% ggplot() +
   geom_sf(aes(fill = atk2),show.legend = T)+
   scale_fill_continuous(low="yellow", high="red",
-                        guide="colorbar",na.value="white")+
+                        guide="colorbar",na.value="white",
+                        name = "Attack rate",
+                        limits = c(0.001,0.007))+
    geom_sf_text(aes(label = nl_name_2), size = 1.5)+
   theme_void()+
   ggtitle('Second peak')
@@ -1024,14 +854,18 @@ qh_atk <- df_atk %>%
   ggplot(aes(x = datetime, y = atr)) + geom_line() +
   scale_x_datetime(breaks = lubridate::make_datetime(2023,1:12),labels = month.abb)+
   facet_wrap(~district)+
-  theme_minimal()+
+  theme_bw()+
   xlab("Addmission date (day)")+
   ylab("Attack rate")+
   # ylim(0,50)+
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,size = 7))
 ```
 
-## Incidence
+# First hypothesis
+
+## Epicurve
+
+We will look at the epidemic curves per commune and/or district whether cases from locations cause the peaks
 
 ::: {.panel-tabset .nav-pills}
 ## Plot
@@ -1050,22 +884,305 @@ spatial_dis1 + spatial_dis2 +
 ```
 :::
 
-## Attack rate Using population census 2019 data
+## Geographical differences testing
+
+The Chi-square test was used for testing the case proportion between two peaks of each district compared to others.Districts in the North and North-East likely contributed to the first peak and the Southern contributed to the second peak.
+
+```{r}
+d1 <- fi_peak %>% group_by(district) %>%
+  count() %>% as.data.frame()
+
+d2 <- se_peak %>% group_by(district) %>%
+  count() %>% as.data.frame()
+
+outf <- data.frame()
+
+for (i in 1:22){
+  f <- c(d1[i,2],sum(d1[-i,2]))
+  s <- c(d2[i,2],sum(d2[-i,2]))
+  re <- chisq.test(data.frame(f,s))
+  out <- c(d1[i,1],d1[i,2]/sum(d1[,2]),d2[i,2]/sum(d2[,2]),re$p.value)
+  outf <- rbind(outf,out)
+}
+
+colnames(outf) <- c("district","pro1","pro2","p")
+
+outf$diff <- (as.numeric(outf$pro2) - as.numeric(outf$pro1))
+
+outf$p1 = as.factor(cut(as.numeric(outf$p), c(0,0.01, 0.05, 1), right=TRUE ))
+
+levels(outf$p1) = c("<0.01", "0.01-0.05", ">0.05")
+
+outf$diff1 = as.factor(cut(as.numeric(outf$diff), c(-1,0,1), right=TRUE ))
+levels(outf$diff1) = c("Decrease","Increase")
+
+outf$out <- ifelse(outf$p1 == "<0.01" & outf$diff1 == "Decrease",
+                     "Significant decrease (p < 0.01)",
+         ifelse(outf$p1 == "<0.01" & outf$diff1 == "Increase",
+              "Significant increase (p < 0.01)",
+              "No significant difference"))
+```
 
 ::: {.panel-tabset .nav-pills}
 ## Plot
 
 ```{r}
-qh_atk
+plotdta <- left_join(qhtp,outf, by = join_by(name_2 == district))
+
+ggplot(data = plotdta) + geom_sf(aes(fill = out)) +
+  # scale_fill_discrete(name = "Geographical differences")+
+  geom_sf_text(aes(label = nl_name_2), size = 4)+
+  scale_fill_manual(values = c("white", "#7a8c99","#ed4b11"),
+                    name = "Geographical differences \nbetween 1st and 2nd peaks",
+                    guide = guide_legend(reverse = TRUE))+
+  theme_void()+
+  theme(legend.text = element_text(size = 15),
+        legend.title = element_text(size = 15),
+        legend.position = "inside",
+        legend.position.inside =  c(.90, .85))
+  # ggspatial::annotation_north_arrow(
+  #   location = "tr", which_north = "true",
+  #   pad_x = unit(0.4, "in"), pad_y = unit(0.4, "in"),
+  #   style = ggspatial::north_arrow_nautical(
+  #     fill = c("grey40", "white"),
+  #     line_col = "grey20",
+  #     text_family = "ArcherPro Book"
+  #   ))
+
 ```
 
+## Data
+
+```{r}
+outf
+```
+:::
+
+# Second hypothesis
+
+To analyze age structure, we will look at the age distribution of cases as a function of time either continuous variable or binary variable (first peak and second peak), and space (commune or district).
+
+## Binary time variable
+
+::: columns
+::: {.column width="50%"}
+```{r}
+(p23 + geom_vline(xintercept = as.Date("2023-09-03")))/
+  ad
+```
+:::
+
+::: {.column width="50%"}
+```{r}
+data %>% 
+tbl_summary(by = peak,
+            digits = list(all_continuous() ~ 3))
+```
+:::
+:::
+
+## Continuous time variable
+
+Two types of analysis: heat map and sliding window (time-varying mean age and \[25th,75th\] quartile).
+
+### Full period analysis
+
+::: columns
+::: {.column width="50%"}
+Sliding window with width 7 days and step 1 days
+
+```{r}
+subplot(aa, age_dis,nrows = 2) 
+```
+:::
+
+::: {.column width="50%"}
+Heat map of age distribution (sliding window with 7-day width and 7-day step)
+
+```{r}
+hm1723
+```
+:::
+:::
+
+### Annual analysis
+
+::: {.panel-tabset .nav-pills}
+## 2023
+
+::: columns
+::: {.column width="50%"}
+Sliding window with width 7 days and step 1 days
+
+```{r}
+subplot(aa23, age_dis23,nrows = 2) 
+```
+:::
+
+::: {.column width="50%"}
+Heat map of age distribution (sliding window with 7-day width and 7-day step)
+
+```{r}
+tshm(w23, agelim = c(0,5)) 
+```
+:::
+:::
+
+## 2022
+
+::: columns
+::: {.column width="50%"}
+Sliding window with width 7 days and step 1 days
+
+```{r}
+subplot(aa22, age_dis22,nrows = 2) 
+```
+:::
+
+::: {.column width="50%"}
+Heat map of age distribution (sliding window with 7-day width and 7-day step)
+
+```{r}
+tshm(w22, agelim = c(0,5)) 
+```
+:::
+:::
+
+## 2021
+
+::: columns
+::: {.column width="50%"}
+Sliding window with width 7 days and step 1 days
+
+```{r}
+subplot(aa21, age_dis21,nrows = 2) 
+```
+:::
+
+::: {.column width="50%"}
+Heat map of age distribution (sliding window with 7-day width and 7-day step)
+
+```{r}
+tshm(w21, agelim = c(0,5)) 
+```
+:::
+:::
+
+## 2020
+
+::: columns
+::: {.column width="50%"}
+Sliding window with width 7 days and step 1 days
+
+```{r}
+subplot(aa20, age_dis20,nrows = 2) 
+```
+:::
+
+::: {.column width="50%"}
+Heat map of age distribution (sliding window with 7-day width and 7-day step)
+
+```{r}
+tshm(w20, agelim = c(0,5)) 
+```
+:::
+:::
+
+## 2019
+
+::: columns
+::: {.column width="50%"}
+Sliding window with width 7 days and step 1 days
+
+```{r}
+subplot(aa19, age_dis19,nrows = 2) 
+```
+:::
+
+::: {.column width="50%"}
+Heat map of age distribution (sliding window with 7-day width and 7-day step)
+
+```{r}
+tshm(w19, agelim = c(0,5)) 
+```
+:::
+:::
+
+## 2018
+
+::: columns
+::: {.column width="50%"}
+Sliding window with width 7 days and step 1 days
+
+```{r}
+subplot(aa18, age_dis18,nrows = 2) 
+```
+:::
+
+::: {.column width="50%"}
+Heat map of age distribution (sliding window with 7-day width and 7-day step)
+
+```{r}
+tshm(w18, agelim = c(0,5)) 
+```
+:::
+:::
+
+## 2017
+
+::: columns
+::: {.column width="50%"}
+Sliding window with width 7 days and step 1 days
+
+```{r}
+subplot(aa17, age_dis17,nrows = 2) 
+```
+:::
+
+::: {.column width="50%"}
+Heat map of age distribution (sliding window with 7-day width and 7-day step)
+
+```{r}
+tshm(w17, agelim = c(0,5)) 
+```
+:::
+:::
+:::
+
+```{r}
+co <- data.frame()
+
+for (i in 0:5){
+  gen <- seq(0,1,le=52) + i
+  co <- rbind(co,gen)
+}
+
+ch <- data.frame(date = w23$adat$date,
+           c0 = as.numeric(co[1,]),
+           c1 = as.numeric(co[2,]),
+           c2 = as.numeric(co[3,]),
+           c3 = as.numeric(co[4,]),
+           c4 = as.numeric(co[5,]))
+```
+
+## Spatial distribution
+
+### Attack rate using population census 2019 data
+
+::: {.panel-tabset .nav-pills}
 ## Map
 
 ```{r}
 spatial_atk191 + spatial_atk192 + 
   plot_annotation(
-    title = "Incidence"
+    title = "Attack rate"
   )
+```
+
+## Plot
+
+```{r}
+qh_atk
 ```
 
 ## Data
@@ -1075,7 +1192,7 @@ dta2p_2019
 ```
 :::
 
-## Attack rate using data from vaccine registry (Hep B)
+### Attack rate using data from vaccine registry (Hep B)
 
 ::: {.panel-tabset .nav-pills}
 ## Map
@@ -1093,3 +1210,620 @@ spatial_atk1 + spatial_atk2 +
 dta2p
 ```
 :::
+
+# Epiestim
+
+Using Cori method to estimate Instantaneous reproduction number $R_t^i$
+
+```{r,results='hide'}
+## data
+library(EpiEstim)
+Sys.setlocale("LC_TIME", "English")
+inc23 <- df1 %>% filter(year(adm_date) == "2023") %>%
+  filter(!is.na(adm_date) ) %>%
+  count(adm_date)
+
+inc23$adm_date <- inc23$adm_date %>% as_date()
+
+inc23_w <- df1 %>% filter(year(adm_week) == "2023") %>%
+  filter(!is.na(adm_week) ) %>%
+  count(adm_week) %>% as.data.frame()
+colnames(inc23_w) <- c("dates","I")
+inc23_w$week <- 1:nrow(inc23_w)
+inc23_w$week <- ifelse(inc23_w$week == 53,52,inc23_w$week)
+inc23_w <- inc23_w %>% mutate(newn = ifelse(week == 52, sum(I[week==52]), I)) %>% 
+  select(dates,newn)
+```
+
+```{r}
+## analysis
+test <- estimate_R_agg(inc23_w[-52,2],
+                   method="parametric_si",
+                   recon_opt = "match",
+                   config = make_config(list(
+                   mean_si = 3.7,
+                   std_si = 2.6))
+)
+
+rt <- plot(test , legend = FALSE)
+
+res <- data.frame(dates = inc23$adm_date[-365],
+                I = test$I
+           )
+
+res_e <- estimate_R(res,
+               method="parametric_si",
+               config = make_config(list(
+                 mean_si = 3.7,
+                 std_si = 2.6))
+)
+rt2 <- plot(res_e , legend = FALSE)
+
+inci <- ggplot(data = inc23[-365,],aes(x = adm_date))+
+  geom_line(aes(y = n,col = "Reported"),alpha = 0.65,lwd = 1.25)+
+  geom_line(aes(y = test$I,col = "Reconstructed"),lwd = 1.25)+
+  theme_classic()+
+  theme(legend.title=element_blank(),
+        legend.justification = c(1, 1), legend.position = c(1,1),
+        legend.background=element_rect(color = "red",fill = "white", size = 0.1,
+                                       linetype = "solid"),
+        legend.key = element_blank(),
+        legend.text=element_text(size=10))+
+  xlab("Addmission date (day)")+
+  ylab("Cases")
+
+```
+
+Use reconstructed incidence to fit
+
+::: columns
+::: {.column width="50%"}
+```{r}
+inci
+```
+:::
+
+::: {.column width="50%"}
+```{r}
+rt2
+```
+:::
+:::
+
+Use aggregated incidence to fit
+
+::: columns
+::: {.column width="50%"}
+```{r}
+inci
+```
+:::
+
+::: {.column width="50%"}
+```{r}
+rt
+```
+:::
+:::
+
+# tSIR
+
+```{r}
+library(mgcv)
+count_dangky_week <- readRDS("D:/OUCRU/hfmd/data/count_dangky_week.rds")
+child <- count_dangky_week %>% filter(birth_year >= 2017) %>% group_by(birth_week, birth_year) %>%
+  summarise(n=sum(n)) %>% arrange(birth_year)
+colnames(child) <- c("week","year","birth")
+```
+
+```{r}
+## combine week 52 and 53
+child$week <- ifelse(child$week == 53,52,child$week)
+
+child <- child %>% group_by(year) %>%
+  mutate(newn = ifelse(week == 52, sum(birth[week==52]), birth)) %>%
+  {data.frame(.$week, .$year, .$newn )} %>% unique() %>%
+  magrittr::set_colnames(c("week","year","birth"))
+
+child$week2 <- seq(1:length(child$week))
+```
+
+```{r}
+time <- data.frame()
+
+for (i in 2017:2022){
+  range <- child$week[child$year == i]
+  if (length(range) == 52){
+  time_add <- seq.int(i + 7/365 ,(i+1) - 7/365,
+                                 length.out = length(range)) %>% data.frame()
+  } else {
+  time_add <- seq.int(i + 7/365 ,(i+1) - 7/365,
+                                   length.out = 52)[1:length(range)] %>% data.frame()
+  }
+  time <- rbind(time,time_add)
+}
+
+
+child[,5] <- time %>%
+  magrittr::set_colnames(c("time"))
+```
+
+```{r}
+## model
+cutpoint <- function(point){
+  fitt <- mgcv::gam(birth ~ s(week) + s(week2),
+                    method = "REML",data = child[-c(point:nrow(child)),])
+
+  new_data2 <- data.frame(week = rep(1:52,7))
+
+  new_data2$week2 <- seq(1,nrow(new_data2))
+  new_data2$year <- rep(2017:2023,each = 52)
+
+  time <- data.frame()
+  for (i in 2017:2023){
+    range <- new_data2$week[new_data2$year == i]
+    time_add <- data.frame(seq.int(i + 7/365 ,(i+1) - 7/365,
+                                   length.out = length(range)))
+    time <- rbind(time,time_add)
+  }
+
+  new_data2[4] <- time %>%
+    magrittr::set_colnames(c("time"))
+
+  est2 <- predict.gam(fitt,newdata = new_data2,
+                      type="response",se.fit = TRUE)
+
+  new_data2 <- new_data2 %>% mutate(
+    fit = est2$fit,
+    lwr = est2$fit - qt(0.95,nrow(new_data2))*est2$se.fit,
+    upr = est2$fit + qt(0.95,nrow(new_data2))*est2$se.fit,
+  )
+  out <- list()
+  out$point <- point
+  out$df <- new_data2
+  return(out)
+}
+```
+
+```{r}
+model <- cutpoint(270)
+```
+
+```{r}
+hfmd1723 <- df1 %>% filter(year(adm_week) >= "2017" & year(adm_week) <= "2023") %>%
+    filter(!is.na(adm_week) ) %>%
+    count(adm_week)
+
+agr17 <- hfmd1723 %>% filter(year(adm_week) == "2017") %>%
+  filter(!is.na(adm_week) ) %>% mutate(week = 1:length(adm_week)) %>% as.data.frame()
+
+agr17$week <- ifelse(agr17$week == 53,52,agr17$week)
+
+d17 <- agr17 %>% mutate(newn = ifelse(week == 52, sum(n[week==52]), n),
+                        year = year(adm_week)) %>%
+  {data.frame(.$week, .$year, .$newn )} %>% unique() %>%
+  magrittr::set_colnames(c("week","year","cases"))
+
+## 18
+
+d18 <- hfmd1723 %>% filter(year(adm_week) == "2018") %>%
+  filter(!is.na(adm_week) ) %>% mutate(week = 1:length(adm_week),
+                                       year = year(adm_week)) %>%
+  as.data.frame() %>% select(week,year,n) %>%
+  magrittr::set_colnames(c("week","year","cases"))
+
+## 19
+d19 <- hfmd1723 %>% filter(year(adm_week) == "2019") %>%
+  filter(!is.na(adm_week) ) %>% mutate(week = 1:length(adm_week),
+                                       year = year(adm_week)) %>%
+  as.data.frame() %>% select(week,year,n) %>%
+  magrittr::set_colnames(c("week","year","cases"))
+
+## 20
+d20 <- hfmd1723 %>% filter(year(adm_week) == "2020") %>%
+  filter(!is.na(adm_week) ) %>% mutate(week = 1:length(adm_week),
+                                       year = year(adm_week)) %>%
+  as.data.frame() %>% select(week,year,n) %>%
+  magrittr::set_colnames(c("week","year","cases"))
+
+## 21
+d21 <- hfmd1723 %>% filter(year(adm_week) == "2021") %>%
+  filter(!is.na(adm_week) ) %>% mutate(week = 1:length(adm_week),
+                                       year = year(adm_week)) %>%
+  as.data.frame() %>% select(week,year,n) %>%
+  magrittr::set_colnames(c("week","year","cases"))
+
+## 22
+d22 <- hfmd1723 %>% filter(year(adm_week) == "2022") %>%
+  filter(!is.na(adm_week) ) %>% mutate(week = 1:length(adm_week),
+                                       year = year(adm_week)) %>%
+  as.data.frame() %>% select(week,year,n) %>%
+  magrittr::set_colnames(c("week","year","cases"))
+
+## 23
+agr23 <- hfmd1723 %>% filter(year(adm_week) == "2023") %>%
+  filter(!is.na(adm_week) ) %>% mutate(week = 1:length(adm_week)) %>% as.data.frame()
+
+agr23$week <- ifelse(agr23$week == 53,52,agr23$week)
+
+d23 <- agr23 %>% mutate(newn = ifelse(week == 52, sum(n[week==52]), n),
+                        year = year(adm_week)) %>%
+  {data.frame(.$week, .$year, .$newn )} %>% unique() %>%
+  magrittr::set_colnames(c("week","year","cases"))
+
+
+cases1723 <- rbind(d17,d18,d19,d20,d21,d22,d23)
+```
+
+```{r}
+birth1723 <- model$df %>%
+  select(week,year,fit)
+
+hcm1723 <- left_join(cases1723,birth1723, by = c("week" = "week","year" = "year"))
+
+time <- data.frame()
+
+for (i in 2017:2023){
+  range <- hcm1723$week[hcm1723$year == i]
+  if (length(range) == 52){
+    time_add <- seq.int(i + 7/365 ,(i+1) - 7/365,
+                        length.out = length(range)) %>% data.frame()
+  } else {
+    time_add <- seq.int(i + 7/365 ,(i+1) - 7/365,
+                        length.out = 52)[1:length(range)] %>% data.frame()
+  }
+  time <- rbind(time,time_add)
+}
+
+hcm1723[,5] <- time %>%
+  magrittr::set_colnames(c("time"))
+
+hcm1723 <- hcm1723 %>% select(time,cases,fit) %>%
+  magrittr::set_colnames(c("time","cases","births"))
+```
+
+```{r}
+## only 2023
+
+hfmd23 <- df1 %>% filter(year(adm_week) == "2023") %>%
+  filter(!is.na(adm_week) ) %>%
+  count(adm_week)
+
+hfmd23$week <- 1:length(hfmd23$adm_week)
+hfmd23$week <- ifelse(hfmd23$week == 53,52,hfmd23$week)
+
+hfmd23$n2 <- ifelse(hfmd23$week == 52, sum(hfmd23$n[hfmd23$week==52]), hfmd23$n)
+
+hfmd23 <- hfmd23[-53,]
+
+```
+
+```{r,results='hide'}
+library(odin)
+generator <- odin::odin({
+  deriv(N) <- r * N * (1 - N / K)
+  initial(N) <- N0
+
+  N0 <- user(1)
+  K <- user(100)
+  r <- user()
+})
+
+mod <- generator$new(N0 = 9381717,r = 7.4/52,K= 9456700)
+y3 <- mod$run(1:52)
+
+## pop for 1723
+mod2 <- generator$new(N0 = 8446000,r = 7.4/52,K= 9456700)
+y1723 <- mod2$run(1:360)
+```
+
+```{r}
+library(tsiR)
+dta23 <- model$df %>% filter(year == 2023)
+
+hcm23 <- data.frame(time = dta23$time,
+                    cases = hfmd23$n,
+                    births = dta23$fit,
+                    pop = y3[,2])
+
+hcm_hfmd23 <- runtsir(data = hcm23, IP = 1, xreg = "cumcases", regtype = "gaussian",
+                     alpha = NULL, sbar = NULL, method = "negbin", nsim = 100,
+                     family = "gaussian", link = "identity")
+
+
+pdhcm1723 <- hcm23
+pdhcm1723$susceptible <- hcm_hfmd23$simS$mean
+pdhcm1723$date <- hfmd23$adm_week
+```
+
+```{r}
+ggplot(melt(pdhcm1723[,-1],id='date'),aes_string(x='date',y='value'))+
+  geom_line(colour='dodgerblue',size=1)+
+  facet_wrap(~variable,ncol=1,scales="free_y")+
+  xlim(as.Date("2022-12-31"),as.Date("2024-01-01"))+
+  theme_bw()
+```
+
+```{r}
+## recaculate attack rate
+time1 = df1$adm_date
+age1 =  df1$age1
+dob = pop_a$dob
+n = pop_a$n
+
+dft <- data.frame(time1,age1) %>%
+  filter(!is.na(time1) & !is.na(age1)) %>%
+  arrange(time1)
+
+
+dft$agr=as.factor(cut(dft$age1, c(0,0.5,
+                                  1,1.5,
+                                  2,2.5,
+                                  3,3.5,
+                                  4,4.5,5,100), right=TRUE ))
+levels (dft$agr) = c("0-0.5", "0.5-1", "1.0-1.5",
+                     "1.5-2","2-2.5","2.5-3",
+                     "3-3.5","3.5-4","4-4.5",
+                     "4.5-5","5+")
+
+sus_pop <- data.frame(dob = dob, n = n)
+
+out_total <- data.frame()
+dateaa <- hfmd23$adm_week+3
+
+sus_pop <- data.frame(dob = dob, n = n)
+
+for (i in 1:52){
+  sus_pop$age <- interval(sus_pop$dob, dateaa[i]) / years(1)
+
+  sus_pop$agr=as.factor(cut(sus_pop$age, c(0,0.5,
+                                           1,1.5,
+                                           2,2.5,
+                                           3,3.5,
+                                           4,4.5,5,100), right=TRUE ))
+  levels (sus_pop$agr) = c("0-0.5", "0.5-1", "1.0-1.5",
+                           "1.5-2","2-2.5","2.5-3",
+                           "3-3.5","3.5-4","4-4.5",
+                           "4.5-5","5+")
+  outcum <- sus_pop %>% group_by(agr) %>%
+    summarise(n = sum(n)) %>%
+    as.data.frame()
+  outcum$date <- rep(dateaa[i],nrow(outcum))
+  out_total <- rbind(out_total,outcum)
+}
+
+deno <- out_total %>%
+  pivot_wider(names_from = agr, values_from = n) %>% as.data.frame()
+
+casss <- wwww$wdat
+
+casss$agr=as.factor(cut(casss$age, c(0,0.5,1,1.5,2,2.5,
+                                     3,3.5,4,4.5,5,100), right=TRUE ))
+levels (casss$agr) = c("0-0.5", "0.5-1", "1.0-1.5",
+                       "1.5-2","2-2.5","2.5-3",
+                       "3-3.5","3.5-4","4-4.5",
+                       "4.5-5","5+")
+
+casss <- casss %>% group_by(date,agr) %>%
+  count() %>% pivot_wider(names_from = agr, values_from = n) %>% as.data.frame()
+
+casss <- casss[,-13]
+casss <- replace(casss,is.na(casss), 0)
+casss <- casss[,c(1:10,12,11)]
+
+atkr <- data.frame()
+
+atkr <- rbind(atkr,as.numeric(casss[1,-1])/as.numeric(deno[1,-1]))
+for (i in 1:51){
+  new <- as.numeric(casss[i+1,-1])/(as.numeric(deno[i+1,-1]) - as.numeric(casss[i,-1]))
+  atkr <- rbind(atkr,new)
+}
+atkr <- cbind(deno$date,atkr)
+
+colnames(atkr) <- colnames(deno)
+atkr <- replace(atkr,is.na(atkr), 0)
+
+atk_plot <- atkr %>% pivot_longer(cols=c("0-0.5", "0.5-1", "1.0-1.5",
+                                         "1.5-2","2-2.5","2.5-3",
+                                         "3-3.5","3.5-4","4-4.5",
+                                         "4.5-5","5+"),
+                                  names_to= 'agr',
+                                  values_to='atk') %>% as.data.frame()
+```
+
+```{r}
+atk <- ggplot(atk_plot, aes(x=as.character(date), y=agr, fill = atk)) +
+  geom_raster()+
+  scale_fill_gradient(low="yellow", high="red",
+                        name = "Attack rate")+
+  scale_y_discrete(limits=rev)+
+  theme_minimal()+
+  labs(y = "Age group")+
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.text.y = element_text(size = 8),
+        legend.text = element_text(size=4),
+        legend.title = element_text(size=7))
+```
+
+```{r}
+beta <- hcm_hfmd23$contact
+beta[52,] <- beta[51,]
+
+c <- ggplot(data = hcm23 %>%
+  select(time,cases) %>% mutate(date = hfmd23$adm_week + 3)) +
+  geom_line(aes(x= as.character(date), group = 1, y = cases,
+                linetype = "cases reported"))+
+  # geom_bar(aes(x= as.character(date), y = cases),stat = "identity")+
+  geom_line(aes(x = as.character(date) ,group = 1, y = hcm_hfmd23$res$mean,
+                linetype = "model fitted"))+
+  geom_line(aes(x = as.character(date),
+                y= beta$beta*5000000,
+                group =1,col = "contact rate"),alpha = 0.3,inherit.aes = FALSE) +
+  scale_color_manual(values = c("contact rate" = "blue"),
+                     name="Analysis Type")+
+  scale_linetype_manual(values = c("cases reported" = "dashed","model fitted" = "solid"),
+                        name="Analysis Type")+
+  scale_y_continuous(
+    name = "Cases",
+    # Add a second axis and specify its features
+    sec.axis = sec_axis(~./5000000, name="Contact rate")
+  )+
+  theme_minimal()+
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        legend.title= element_blank(),
+        legend.position = "inside",
+        legend.position.inside =  c(.15, .60))+
+  geom_vline(xintercept = as.character("2023-05-24"))+
+  geom_vline(xintercept = as.character("2023-09-06"))+
+  annotate(
+    geom = "text", x = as.character("2023-05-31"), y = 3500,
+    label = "Summer break", hjust = 0, vjust = 1, size = 3
+  )
+```
+
+```{r}
+hmc <- ggplot(data=w23$wdat, aes(x=date, y=age)) +
+  stat_density(
+    aes(fill = after_stat(density)),
+    geom = "raster",
+    position = "identity"
+  )+
+  scale_fill_gradient(low="yellow", high="red")+
+  geom_line(data = ch,aes(x = date,y = c0),col = "white",
+            group = 1,lwd = 0.5,alpha = 0.5)+
+  geom_line(data = ch,aes(x = date,y = c1),col = "white",
+            group = 1,lwd = 0.5,alpha = 0.5)+
+  geom_line(data = ch,aes(x = date,y = c2),col = "white",
+            group = 1,lwd = 0.5,alpha = 0.5)+
+  geom_line(data = ch,aes(x = date,y = c3),col = "white",
+            group = 1,lwd = 0.5,alpha = 0.5)+
+  geom_line(data = ch,aes(x = date,y = c4),col = "white",
+            group = 1,lwd = 0.5,alpha = 0.5)+
+  scale_y_reverse(lim= rev(c(0,5)))+
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,size = 8),
+        legend.text = element_text(size=4),
+        legend.title = element_text(size=7))
+```
+
+# Attack rate
+
+$$\text{Attack rate} = \frac{\text{number of new cases in the population at risk}}{\text{number of people at risk in the population}}$$
+
+```{r}
+c/
+atk/
+hmc
+```
+
+# Reconstruct epicure 2013-2023
+
+```{r}
+hfmd23a <- df1 %>% filter(year(adm_date) == "2023") %>%
+  filter(!is.na(adm_date) ) %>%
+  count(adm_date)
+
+newdat <- agdf %>% 
+  mutate(datetime = lubridate::make_datetime(2020, month, day))
+
+```
+
+```{r}
+recon <- function(data){
+  retu <- data.frame()
+  
+  for (i in 1:length(data)) {
+    dfr <- data[[i]]
+    
+    res1 <- data.frame(dates = dfr$adm_date,
+                       I = dfr$n)
+    
+    res_e1 <- estimate_R_agg(aggregate_inc(dfr$n, dt = 7L),
+                             method="parametric_si",
+                             recon_opt = "match",
+                             config = make_config(list(
+                               mean_si = 3.7,
+                               std_si = 2.6)))
+    
+    reou <- res1[1:length(res_e1$I),] %>% mutate(reI = res_e1$I)
+    retu <- rbind(retu,reou)
+  }
+  return(retu)
+}
+```
+
+```{r}
+resdf <- recon(list(hfmd13,hfmd14,hfmd15,hfmd16,hfmd17,hfmd18,hfmd19,
+           hfmd20,hfmd21,hfmd22,hfmd23a))
+```
+
+```{r}
+re_ca1 <- resdf %>% mutate(year = year(dates),
+                          month = month(dates),
+                          day = day(dates),
+                          datetime = lubridate::make_datetime(2020, month, day))
+
+re_ca <- re_ca1 %>% ggplot() +
+  geom_line(aes(datetime, I,col = "Reported cases"),alpha = 0.5) +
+  geom_line(aes(datetime, reI,col = "Reconstructed cases")) +
+  geom_vline(xintercept = newdat$datetime[newdat$adm_date == "2013-05-24"],
+             alpha = 0.25,col = "blue")+
+  geom_vline(xintercept = newdat$datetime[newdat$adm_date == "2013-09-06"],
+             alpha = 0.25,col = "blue")+
+  scale_x_datetime(breaks = lubridate::make_datetime(2020,1:12),
+                   labels = month.abb) +
+  facet_wrap(vars(year),scales = "free")+
+  ylab("Cases")+
+  xlab("Admission time (Daily)") +
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,size = 10),
+        legend.position = "top",
+        legend.title = element_blank(),
+        legend.text = element_text(size = 15),
+        axis.title.x = element_text(size = 15),
+        axis.title.y = element_text(size = 15))
+```
+
+```{r}
+dat_text <- data.frame(
+  label = c("EV-A71\n(B5)","CV-A6","EV-A71 (B5) \n (Jan-June) \n & CV-A6",
+            "EV-A71\n(B5)","CV-A6","EV-A71\n(C4)","EV-A71\n(C4)",
+            "Unknown","Unknown","Unknown","EV-A71\n(B5)"),
+  year   = seq(2013,2023),
+  x     = rep(newdat$datetime[newdat$adm_date == "2013-02-28"],11),
+  y     = c(50,60,60,30,250,400,300,200,200,200,400)
+)
+
+dat_text2 <- data.frame(
+  label = c(rep("Summer \n break",8),
+            "COVID-19 \n quarantine",
+            rep("Summer \n break",11-9)),
+  year   = seq(2013,2023),
+  x     = c(rep(newdat$datetime[newdat$adm_date == "2013-07-20"],4),
+            newdat$datetime[newdat$adm_date == "2013-06-30"],
+            rep(newdat$datetime[newdat$adm_date == "2013-07-20"],11-6),
+            newdat$datetime[newdat$adm_date == "2013-06-30"]),
+  y     = c(50,65,75,32.5,255,550,400,190,200,200,485)
+)
+
+re_ca + 
+  geom_text(
+  data    = dat_text,
+  mapping = aes(x = x, y = y, label = label),
+  size  = 4
+)+
+  geom_text(
+    data    = dat_text2,
+    mapping = aes(x = x, y = y, label = label),
+    size  = 4,
+    col = "blue"
+  )
+```
+
+<a href="https://www.ijidonline.com/article/S1201-9712(23)00403-4/fulltext">HAND, FOOT AND MOUTH DISEASE IN SOUTHERN VIETNAM DURING 2015 – 2021 </a>
+
+<a href="https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7451980/">Clinical, etiological and epidemiological investigations of hand, foot and mouth disease in southern Vietnam during 2015 – 2018</a>

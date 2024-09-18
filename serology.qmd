@@ -1,0 +1,1309 @@
+---
+title: "Serology of HFMD 2023"
+format: 
+  html:
+    page-layout: full
+    embed-resources: true
+    toc: true
+knitr:
+  opts_chunk:
+    out.width: "100%"
+    out.height: "100%"
+editor: visual
+echo: true
+warning: false
+message: false
+bibliography: references.bib
+---
+
+</details>
+
+```{=html}
+<details>
+  <summary> Library </summary>
+```
+```{r}
+library(readxl)
+library(lubridate)
+library(ggplot2)
+library(cowplot)
+library(tidyverse)
+library(hrbrthemes)
+library(ggsci)
+library(patchwork)
+library(plotly)
+library(gtsummary)
+library(reshape2)
+library(ggspatial)
+library(serosv)
+library(locfit)
+Sys.setlocale("LC_TIME", "English")
+```
+
+</details>
+
+</details>
+
+```{=html}
+<details>
+  <summary> Function </summary>
+```
+```{r}
+# function from serosv package
+
+## plot function
+plot_util <- function(age, pos, tot, sero, foi){
+  plot <- ggplot(data = data.frame(age, pos, tot), aes(x = age, y = pos/tot)) +
+    geom_point(size = 8*(pos)/max(tot), shape = 1)+
+    labs(y="Seroprevalence", x="Age")+
+    coord_cartesian(xlim=c(0,max(age)), ylim=c(0, 1)) +
+    scale_y_continuous(
+      name = "Seroprevalence",
+      sec.axis = sec_axis(~.*1, name = " Force of infection")
+    ) + set_plot_style()
+
+  # === Add seroprevalence layer
+  if (class(sero) == "data.frame"){
+    # --- Sero is dataframe when confidence interval is computed
+    plot <- plot + geom_smooth(aes_auto(sero, col = "sero", linetype="sero",
+                                        fill = "ci"), data=sero,
+                               stat="identity",lwd=0.5)
+  }else{
+    # --- Simply plot seroprevalence line if CI cannot be computed
+    plot <- plot + geom_line(aes(x = age, y = sero, col = "sero", linetype="sero"),
+                             stat="identity",lwd=0.5)
+  }
+
+  # === Add foi layers
+  if (class(foi) == "data.frame"){
+    # --- Handle cases like that of weibull model
+    plot <- plot + geom_line(aes_auto(foi, col = "foi", linetype="foi"), data=foi,
+                             stat="identity",lwd=0.5)
+  }else if (length(age) != length(foi)){
+    # --- handle some cases when length of age differs from length of foi
+    age <- age[c(-1,-length(age))]
+    foi <- data.frame(x = age, y = foi)
+    plot <- plot + geom_line(aes_auto(foi, col = "foi", linetype="foi"), data = foi,
+                             lwd = 0.5)
+  }else{
+    # --- Simply plot foi
+    plot <- plot + geom_line(aes(x = age, y = foi, col = "foi", linetype="foi"),
+                             lwd = 0.5)
+  }
+  plot
+}
+
+
+## compute confident interval function
+compute_ci.lp_model <- function(x,ci = 0.95, ...){
+  ages <- x$df$age
+  crit<- crit(x$pi,cov = ci)$crit.val
+  mod1 <- predict(x$pi, data.frame(a = ages),se.fit = TRUE)
+  out.DF <- data.frame(x = ages, y = mod1$fit,ymin= mod1$fit-crit*(mod1$se.fit/100),
+                       ymax= mod1$fit+crit*(mod1$se.fit/100))
+  out.DF
+}
+
+## plot local polynomial model
+plot_lp_model <- function(x, ...) {
+  out.DF <- compute_ci.lp_model(x)
+
+  with(x$df, {
+    plot_util(age = age, pos = pos, tot = tot, sero = out.DF, foi = x$foi)
+  })
+}
+
+## function to aggregate line listing data 
+aggregate2  <- function(data){
+
+  data$age2 = as.factor(cut(data$age+0.0000000001, c(0:15), right=TRUE ))
+  levels(data$age2) = seq(0.5,14.5,by =1)
+
+  agr_out <- data %>% group_by(age2) %>%
+    count(pos) %>%  pivot_wider(names_from = pos, values_from = n) %>%
+    replace(is.na(.), 0) %>% as.data.frame() %>%
+    mutate(sp = `1`/(`1`+`0`))
+  colnames(agr_out) <- c("age","neg","pos","sp")
+  return(agr_out)
+}
+```
+
+</details>
+
+</details>
+
+```{=html}
+<details>
+  <summary> Data </summary>
+```
+```{r}
+apr_2023 <- read_excel("D:/OUCRU/hfmd/data/4_2023.xlsx")
+aug_2023 <- read_excel("D:/OUCRU/hfmd/data/08_2023.xlsx")
+dec_2022 <- read_excel("D:/OUCRU/hfmd/data/12_2022.xls")
+dec_2023 <- read_excel("D:/OUCRU/hfmd/data/12_2023.xlsx")
+
+t423 <- data.frame(apr_2023[-c(1,2),10:14])
+t423$pos <- replace(t423$...14,is.na(t423$...14),0) %>%
+  str_detect(regex(paste(2^(4:10), collapse = "|"))) %>%
+  as.integer(as.logical())
+colnames(t423) <- c("age","col_day","col_month","col_year","neutralization","pos")
+t423$age <- as.numeric(t423$age)
+
+t823 <- data.frame(aug_2023[-c(1,2),c(9,14:17)])
+t823$pos <- str_detect(t823$...17,regex(paste(2^(4:10), collapse = "|"))) %>%
+  as.integer(as.logical())
+colnames(t823) <- c("age","col_day","col_month","col_year","neutralization","pos")
+t823$age <- as.numeric(t823$age)
+
+t1222 <- data.frame(dec_2022[-c(1,2),10:14])
+t1222$pos <- replace(t1222$...14,is.na(t1222$...14),0) %>%
+  str_detect(regex(paste(2^(4:10), collapse = "|"))) %>%
+  as.integer(as.logical())
+colnames(t1222) <- c("age","col_day","col_month","col_year","neutralization","pos")
+t1222$age <- as.numeric(t1222$age)
+
+t1223 <- data.frame(dec_2023[-c(1,2),c(9,14:17)])
+t1223$pos <- replace(t1223$...17,is.na(t1223$...17),0) %>%
+  str_detect(regex(paste(2^(4:10), collapse = "|"))) %>%
+  as.integer(as.logical())
+colnames(t1223) <- c("age","col_day","col_month","col_year","neutralization","pos")
+t1223$age <- as.numeric(t1223$age)
+```
+
+```{r}
+head(t1223)
+```
+
+</details>
+
+# Fitting seroprevalence and calculate force of infection
+
+In this step, I used a non-parametric approach - a local polynomial in Niel Hens 2012 book to fit seroprevalence from serology data [@hens2012a]
+
+Within the local polynomial framework, the linear predictor $\eta(a)$ is approximated locally, at one particular value $a_0$ for age, by a line (local linear, degree $p$ = 1), or a parabola (local quadratic, degree $p$ = 2). The appropriate degree p is a first choice to be made. For a general degree, it holds that the (Taylor) approximation
+
+$$\eta(a_i) \approx \eta(a_0) + \eta^{(1)} (a_0)(a_i - a_0) + \frac{\eta^{(2)}(a_0)}{2} (a_i - a_0)^2 + ... + \frac{\eta^{(p)}(a_0)}{p!} (a_i-a_0)^p$$
+
+is quite accurate, under the condition that $a_i$ is close enough to $a_0$, and that the curve $\eta(\cdot)$ is sufficiently smooth at the age $a_0$ (smoothness is mathematically translated into the existence of the derivatives $\eta^{(1)} (a_0),...,\eta^{(p)} (a_0)$). This mathematical fact naturally inspires the idea to fit a polynomial locally, only for observations with $a_i$ close to $a_0$. This “closeness” is governed by the so-called kernel function $K_h$, assigning high weights to data points with age values close to $a_0$ and low or zero weights to data points further or far away. The kernel function $K_h$ is typically a density function (such as the bell-shaped gaussian density), having mean 0 and variance $h$. This variance parameter $h$ is the so-called smoothing parameter.
+
+Three popular kernels: the Gaussian kernel, the tricube kernel $(70/81×(1−(|u|)3)3 (|u| ≤ 1))$, and the Epanechnikov kernel $(3/4×(1−u2)(|u| ≤ 1))$.
+
+Force of infection
+
+$$ \lambda (a) = \eta'(a) \pi(a)$$
+
+Local polynomial approach is based on the maximization of
+
+$$\sum_{i=1}^{N} l_i \{Y_i,g^{-1} (\beta_0 + \beta_1 (a_i - a_0)+ \beta_2 (a_i - a_0)^2 + ... + \beta_p (a_i - a_0)^p)\} K_h(a_i - a_0),$$
+
+where
+
+$$l_i \{Y_i,\pi\} = Y_i log\{\pi\} + (1 - Y_i) log\{1 - \pi\}$$
+
+Function `lp_model` from `serosv` package was used for this approach. Parameter `nn` refers to the proportion of closest neighbors, E.g. `nn` = 0.7 a refers to local fit only incorporating 70% of the data, namely the 70% closest neighbors, when fitting the curve at a particular age $a_0$. Parameter `h` refers to local constant bandwidths.
+
+</details>
+
+```{=html}
+<details>
+  <summary> Local polynomial function</summary>
+```
+```{r, eval = F}
+lp_model <- function(age, pos, tot, kern="tcub", nn=0, h=0, deg=2) {
+  if (missing(nn) & missing(h)) {
+    nn <- 0.7 # default nn from lp()
+  }
+
+  model <- list()
+
+  y <- pos/tot
+  estimator <- lp(age, deg=deg, nn=nn, h=h)
+  model$pi  <- locfit(y~estimator, family="binomial", kern=kern)
+  model$eta <- locfit(y~estimator, family="binomial", kern=kern, deriv=1)
+  model$sp  <- fitted(model$pi)
+  model$foi <- fitted(model$eta)*fitted(model$pi) # λ(a)=η′(a)π(a)
+  model$df  <- list(age=age, pos=pos, tot=tot)
+
+  class(model) <- "lp_model"
+  model
+}
+```
+
+</details>
+
+Choosing value of `nn` and/or `h` based on cross-validation and the generalized cross-validation (GCV) method. The cross-validation bandwidth minimizes the cross-validation criterion.
+
+$$CV(h) = \sum_{i=1}^{N} l_i \{Y_i, \widehat{\pi_{i}}^{h} (a_i)\} $$
+
+where $\widehat{\pi_{i}}^{h} (a_i)$ is defined as the local estimator at ai leaving out the ith observation and using bandwidth $h$. The CV-criterion is minimized as a function of $h$ for a constant bandwidth or as a function of the percentage of neighbors α for a nearest neighbor bandwidth.
+
+</details>
+
+```{=html}
+<details>
+  <summary> plot_gcv function </summary>
+```
+```{r,eval = F}
+plot_gcv <- function(age, pos, tot, nn_seq, h_seq, kern="tcub", deg=2) {
+  y <- pos/tot
+
+  # --- Plot for nn seq
+  res <-  cbind(nn_seq, summary(gcvplot(y~age, family="binomial", alpha=nn_seq)))
+  nn_plot <- ggplot() +
+    geom_line(aes(x = res[,1], y = res[,3]), col = "royalblue") +
+    labs(x="nn (% Neighbors)", y="GCV")
+
+
+  # --- Plot for h seq
+  h_seq_ <- cbind(rep(0, length(h_seq)), h_seq)
+  h_res <- cbind(h_seq_[,2],summary(gcvplot(y~age,family="binomial",alpha=h_seq_)))
+  h_plot <- ggplot() +
+    geom_line(aes(x = h_res[,1], y = h_res[,3]), col = "royalblue") +
+    labs(x="h (Bandwidth)", y="GCV")
+
+  # --- Combine 2 plots
+  nn_plot + h_plot + plot_layout(ncol=2)
+}
+```
+
+</details>
+
+## December 2022
+
+</details>
+
+```{=html}
+<details>
+  <summary> Data </summary>
+```
+```{r}
+a1222 <- aggregate2(t1222)
+a1222
+```
+
+</details>
+
+::: columns
+::: {.column width="50%"}
+</details>
+
+```{=html}
+<details>
+  <summary> GCV </summary>
+```
+```{r,eval=F}
+plot_gcv(
+  age = a1222$age,
+  pos = a1222$pos,
+  tot = a1222$pos+ a1222$neg,
+  nn_seq = seq(0.2, 0.8, by=0.1),
+  h_seq = seq(5, 25, by=1)
+)
+```
+
+</details>
+
+```{r,echo = FALSE}
+plot_gcv(
+  age = a1222$age,
+  pos = a1222$pos,
+  tot = a1222$pos+ a1222$neg,
+  nn_seq = seq(0.2, 0.8, by=0.1),
+  h_seq = seq(5, 25, by=1)
+)
+```
+:::
+
+::: {.column width="50%"}
+</details>
+
+```{=html}
+<details>
+  <summary> Code </summary>
+```
+```{r,eval = F}
+lp_fit1222 <- lp_model(age = as.numeric(as.character(a1222$age)),
+                       pos = a1222$pos,
+                       tot = a1222$pos + a1222$neg,
+                       kern="tcub", nn = 0.3,h=25, deg=3)
+
+plot1222 <- plot_lp_model(lp_fit1222)+
+  set_plot_style(
+    sero = "#0808cf",
+    ci = "#0808cf"
+  )+
+  theme_classic() +
+  scale_x_continuous(breaks = seq(0,15,by=1))+
+  theme(legend.position="none")+
+  annotate("text", x = 2, y = 0.85, label = c("Dec 2022"),size = 4)
+```
+
+</details>
+
+```{r,echo = F}
+lp_fit1222 <- lp_model(age = as.numeric(as.character(a1222$age)),
+                       pos = a1222$pos,
+                       tot = a1222$pos + a1222$neg,
+                       kern="tcub", nn = 0.3,h=25, deg=3)
+
+plot1222 <- plot_lp_model(lp_fit1222)+
+  set_plot_style(
+    sero = "#0808cf",
+    ci = "#0808cf"
+  )+
+  theme_classic() +
+  scale_x_continuous(breaks = seq(0,15,by=1))+
+  # theme(legend.position="none")+
+  annotate("text", x = 2, y = 0.85, label = c("Dec 2022"),size = 4)
+plot1222
+```
+:::
+:::
+
+## April 2023
+
+</details>
+
+```{=html}
+<details>
+  <summary> Data </summary>
+```
+```{r}
+a423 <- aggregate2(t423)
+a423
+```
+
+</details>
+
+::: columns
+::: {.column width="50%"}
+</details>
+
+```{=html}
+<details>
+  <summary> GCV </summary>
+```
+```{r,eval=F}
+plot_gcv(
+  age = a423$age,
+  pos = a423$pos,
+  tot = a423$pos+ a423$neg,
+  nn_seq = seq(0.2, 0.8, by=0.1),
+  h_seq = seq(5, 25, by=1)
+)
+```
+
+</details>
+
+```{r,echo = FALSE}
+plot_gcv(
+  age = a423$age,
+  pos = a423$pos,
+  tot = a423$pos+ a423$neg,
+  nn_seq = seq(0.2, 0.8, by=0.1),
+  h_seq = seq(5, 25, by=1)
+)
+```
+:::
+
+::: {.column width="50%"}
+</details>
+
+```{=html}
+<details>
+  <summary> Code </summary>
+```
+```{r,eval = F}
+lp_fit423 <- lp_model(age = as.numeric(as.character(a423$age)),
+                      pos = a423$pos,
+                      tot = a423$pos+ a423$neg,
+                      kern="tcub", nn = 0.7, h = 25, deg=3)
+
+plot423 <- plot_lp_model(lp_fit423)+
+  set_plot_style(
+    sero = "#ed097b",
+    ci = "#ed097b"
+  )+
+  theme_classic() +
+  scale_x_continuous(breaks = seq(0,15,by=1))+
+  theme(legend.position="none")+
+  annotate("text", x = 2, y = 0.85, label = c("Apr 2023"),size = 4)
+```
+
+</details>
+
+```{r,echo = F}
+lp_fit423 <- lp_model(age = as.numeric(as.character(a423$age)),
+                      pos = a423$pos,
+                      tot = a423$pos+ a423$neg,
+                      kern="tcub", nn = 0.8, h = 25, deg=3)
+
+plot423 <- plot_lp_model(lp_fit423)+
+  set_plot_style(
+    sero = "#ed097b",
+    ci = "#ed097b"
+  )+
+  theme_classic() +
+  scale_x_continuous(breaks = seq(0,15,by=1))+
+  # theme(legend.position="none")+
+  annotate("text", x = 2, y = 0.85, label = c("Apr 2023"),size = 4)
+plot423
+```
+:::
+:::
+
+## August 2023
+
+</details>
+
+```{=html}
+<details>
+  <summary> Data </summary>
+```
+```{r}
+a823 <- aggregate2(t823)
+a823
+```
+
+</details>
+
+::: columns
+::: {.column width="50%"}
+</details>
+
+```{=html}
+<details>
+  <summary> GCV </summary>
+```
+```{r,eval=F}
+plot_gcv(
+  age = a823$age,
+  pos = a823$pos,
+  tot = a823$pos+ a823$neg,
+  nn_seq = seq(0.2, 0.8, by=0.1),
+  h_seq = seq(5, 100, by=1)
+)
+```
+
+</details>
+
+```{r,echo = FALSE}
+plot_gcv(
+  age = a823$age,
+  pos = a823$pos,
+  tot = a823$pos+ a823$neg,
+  nn_seq = seq(0.2, 0.8, by=0.1),
+  h_seq = seq(5, 100, by=1)
+)
+```
+:::
+
+::: {.column width="50%"}
+</details>
+
+```{=html}
+<details>
+  <summary> Code </summary>
+```
+```{r,eval = F}
+lp_fit823 <- lp_model(age = as.numeric(as.character(a823$age)),
+                      pos = a823$pos,
+                      tot = a823$pos+ a823$neg,
+                      kern="tcub", nn = 0.3, h=25, deg=3)
+
+plot823 <-plot_lp_model(lp_fit823)+
+  set_plot_style(
+    sero = "#ed6b00",
+    ci = "#ed6b00"
+  )+
+  theme_classic() +
+  scale_x_continuous(breaks = seq(0,15,by=1))+
+  theme(legend.position="none")+
+  annotate("text", x = 2, y = 0.85, label = c("Aug 2023"),size = 4)
+```
+
+</details>
+
+```{r,echo = F}
+lp_fit823 <- lp_model(age = as.numeric(as.character(a823$age)),
+                      pos = a823$pos,
+                      tot = a823$pos+ a823$neg,
+                      kern="tcub", nn = 0.3, h=25, deg=3)
+
+plot823 <-plot_lp_model(lp_fit823)+
+  set_plot_style(
+    sero = "#ed6b00",
+    ci = "#ed6b00"
+  )+
+  theme_classic() +
+  scale_x_continuous(breaks = seq(0,15,by=1))+
+  # theme(legend.position="none")+
+  annotate("text", x = 2, y = 0.85, label = c("Aug 2023"),size = 4)
+plot823 
+```
+:::
+:::
+
+## Dec 2023
+
+</details>
+
+```{=html}
+<details>
+  <summary> Data </summary>
+```
+```{r}
+a1223 <- aggregate2(t1223)
+a1223
+```
+
+</details>
+
+::: columns
+::: {.column width="50%"}
+</details>
+
+```{=html}
+<details>
+  <summary> GCV </summary>
+```
+```{r,eval=F}
+plot_gcv(
+  age = a1223$age,
+  pos = a1223$pos,
+  tot = a1223$pos+ a1223$neg,
+  nn_seq = seq(0.2, 0.8, by=0.1),
+  h_seq = seq(5, 25, by=1)
+)
+
+```
+
+</details>
+
+```{r,echo = FALSE}
+plot_gcv(
+  age = a1223$age,
+  pos = a1223$pos,
+  tot = a1223$pos+ a1223$neg,
+  nn_seq = seq(0.2, 0.8, by=0.1),
+  h_seq = seq(5, 25, by=1)
+)
+
+```
+:::
+
+::: {.column width="50%"}
+</details>
+
+```{=html}
+<details>
+  <summary> Code </summary>
+```
+```{r,eval = F}
+lp_fit1223 <- lp_model(age = as.numeric(as.character(a1223$age)),
+                      pos = a1223$pos,
+                      tot = a1223$pos+ a1223$neg,
+                      kern="tcub", nn =.8,h=9, deg=2)
+plot1223 <-plot_lp_model(lp_fit1223)+
+  set_plot_style(
+    sero = "#33516b",
+    ci = "#33516b"
+  )+
+  theme_classic()+
+  scale_x_continuous(breaks = seq(0,15,by=1))+
+  # theme(legend.position="none")+
+  annotate("text", x = 2, y = 0.85, label = c("Dec 2023"),size = 4)
+```
+
+</details>
+
+```{r,echo = F}
+lp_fit1223 <- lp_model(age = as.numeric(as.character(a1223$age)),
+                      pos = a1223$pos,
+                      tot = a1223$pos+ a1223$neg,
+                      kern="tcub", nn =.8,h=9, deg=2)
+plot1223 <-plot_lp_model(lp_fit1223)+
+  set_plot_style(
+    sero = "#33516b",
+    ci = "#33516b"
+  )+
+  theme_classic()+
+  scale_x_continuous(breaks = seq(0,15,by=1))+
+  # theme(legend.position="none")+
+  annotate("text", x = 2, y = 0.85, label = c("Dec 2023"),size = 4)
+plot1223
+```
+:::
+:::
+
+# Combine cases notification and serology data
+
+```{r,echo = FALSE}
+df1 <- read_excel("D:/OUCRU/hfmd/data/TCM_full.xlsx", 
+    col_types = c("date", "numeric", "text", 
+        "text", "text", "date", "date", "date", 
+        "text", "text", "text"))
+colnames(df1) <- c("dob", "age", "gender", "commune", "district",
+                  "reported_date", "onset_date","adm_date",
+                  "medi_cen","inout","severity")
+df1$dob <- df1$dob %>% as_date()
+df1$adm_date <- df1$adm_date %>% as_date()
+
+df1$age1 <- interval(df1$dob, df1$adm_date) / years(1)
+df1$adm_week <- as.Date(floor_date(df1$adm_date, "week"))
+df1$district <- df1$district %>% str_replace_all(
+          c( "Quận Gò vấp"  = "Quận Gò Vấp"))
+df1$district <- df1$district %>% 
+  str_remove("Quận|Huyện|Thành phố") %>%
+  trimws(which = "both") 
+```
+
+```{r,echo = F}
+df_plot <- df1 %>% filter(year(adm_week) == "2023") %>%
+     filter(!is.na(adm_week) ) %>%
+     count(adm_week) %>% as.data.frame()
+```
+
+</details>
+
+```{=html}
+<details>
+  <summary> Function to calculate seroprevalence by age group (hfmd_sp) </summary>
+```
+```{r}
+hfmd_sp <- function(srt){
+
+op <- data.frame()
+tg <- list()
+model <- list()
+
+for (i in 1:length(srt)) {
+  dtaxl <- srt[[i]]
+
+  dtaxl$col_date<- str_c(dtaxl$col_year,dtaxl$col_month,dtaxl$col_day,sep = " ") %>% ymd()
+  ##agegr_cut <- c(0, 3, 5, 10, 15, Inf)
+  agegr_cut <- c(0, 5, 10, 15, Inf)
+  ##dtaxl$agegr <- cut(as.numeric(dtaxl$age), breaks = c(0, 3, 5, 10, 15, Inf), right = F)
+  dtaxl$agegr <- cut(as.numeric(dtaxl$age), breaks = c(0, 5, 10, 15, Inf), right = F)
+  ##dtaxl$agegr <- factor(dtaxl$agegr, labels = c("0-3", "3-5", "5-10", "10-15"))
+  dtaxl$agegr <- factor(dtaxl$agegr, labels = c("0-5", "5-10", "10-15"))
+  dtaxl$pos <- as.integer(as.logical(dtaxl$pos))
+
+  arg_date <- data.frame(table(dtaxl$col_date))
+
+  outcomt <- data.frame(
+    min = as.Date(arg_date$Var1[1]),
+    max = as.Date(arg_date$Var1[nrow(arg_date)]),
+    mid = as.Date(arg_date$Var1[ceiling(nrow(arg_date)/2)])
+    )
+
+  dtaxl$mid_date <- rep(outcomt$mid,nrow(dtaxl))
+
+  fn_out <- dtaxl  %>%
+    group_by(mid_date,agegr)  %>%
+    count(pos)  %>%  pivot_wider(names_from = pos, values_from = n) %>%
+    data.frame() %>%
+    magrittr::set_colnames(c("col_date", "age_gr", "neg","pos")) %>%
+    replace(is.na(.), 0) %>%
+    dplyr::mutate(tot = neg + pos,
+                pre = pos / tot *100)
+  
+  op  <- rbind(op,fn_out)
+  tg[[i]] <- outcomt
+ }
+
+model$sp <- op
+model$time <- tg
+return(model)
+}
+```
+
+</details>
+
+</details>
+
+```{=html}
+<details>
+  <summary> Code </summary>
+```
+```{r}
+mm <- hfmd_sp(list(t423,t823,t1222,t1223))
+
+for (i in 1:12) {
+  mm$sp$lwr[i] <- prop.test(mm$sp$pos[i],mm$sp$tot[i],correct=TRUE)$conf.int[1]*100
+  mm$sp$upr[i] <- prop.test(mm$sp$pos[i],mm$sp$tot[i],correct=TRUE)$conf.int[2]*100
+}
+
+mm$sp$col_date <- mm$sp$col_date %>% str_replace_all(
+  c( "2023-04-15"  = "2023-04-13",
+     "2023-08-15"  = "2023-08-17",
+     "2023-12-10"  = "2023-12-14",
+     "2022-12-20"  = "2022-12-22"
+  ))
+```
+
+```{r}
+ts <- ggplot(data = mm$sp)+
+  geom_bar(data = df_plot, aes(x = as.Date(adm_week), y = n),stat = "identity",
+           alpha = 0.5) +
+  geom_line(aes(x = as.Date(col_date),y = pre*20,
+                colour = age_gr
+  ))+
+  geom_ribbon(aes(x = as.Date(col_date),y = pre*20,
+                  ymin=lwr*20, ymax=upr*20,
+                  fill = factor(age_gr)), alpha=.3, linetype=0)+
+  scale_y_continuous(name = "Number of cases",
+                     sec.axis = sec_axis(~./20,
+                                         name = "Seroprevalence by age group"))+
+  labs(x = "Date", color = NULL, fill = NULL)+
+  theme_classic()
+```
+
+```{r}
+ts2 <- ts +
+  geom_vline(xintercept = as.Date("2022-12-01"),
+             alpha = 0.4,col = "#0808cf")+
+  geom_vline(xintercept = as.Date("2022-12-30"),
+             alpha = 0.4,col = "#0808cf")+
+  geom_vline(xintercept = as.Date("2023-04-01"),
+             alpha = 0.4,col = "#ed097b")+
+  geom_vline(xintercept = as.Date("2023-04-30"),
+             alpha = 0.4,col = "#ed097b")+
+  geom_vline(xintercept = as.Date("2023-08-01"),
+             alpha = 0.4,col = "#ed6b00")+
+  geom_vline(xintercept = as.Date("2023-08-30"),
+             alpha = 0.4,col = "#ed6b00")+
+  geom_vline(xintercept = as.Date("2023-12-01"),
+             alpha = 0.4,col = "#33516b")+
+  geom_vline(xintercept = as.Date("2023-12-30"),
+             alpha = 0.4,col = "#33516b")+
+  xlim(as.Date("2022-11-24"),as.Date("2024-01-01"))
+```
+
+```{r,eval = F}
+result_sero2 <- plot1222 | plot423 | plot823 | plot1223
+
+result_sero2/
+  ts2
+```
+
+</details>
+
+```{r,echo = F}
+#| fig-width: 17
+#| fig-height: 7
+
+plot1222 <- plot1222 + theme(legend.position="none")
+plot423 <- plot423  + theme(legend.position="none")
+plot823 <- plot823  + theme(legend.position="none")
+  
+result_sero2 <- plot1222 | plot423 | plot823 | plot1223
+
+result_sero2/
+  ts2
+```
+
+# Who Acquires Infection from Whom? The Traditional Approach
+
+If mean duration of infectiousness D is short compared to the timescale on which transmission and mortality rate vary, the force of infection (FOI) $\lambda(a)$ can be approximated by [@anderson1991]
+
+$$\lambda(a) = D  \intop_{0}^{\infty} \beta(a,a') \lambda(a') S(a') da',$$
+
+where $\beta(a,a')$ denotes the transmission rate, i.e., the per capita rate at which an individual of age $a'$ makes an effective contact with a person of age $a$ per year, and $S(a')$ denotes the number of susceptible persons of age $a'$. Assuming a closed population of size N and that we are in demographic and endemic equilibrium. Without loss of generality, assumed a prompt loss of maternal immunity at age A:
+
+$$m(a) = exp(-\intop_{0}^{a} \gamma(u)du) = \begin{equation}\begin{cases} 1, & \text{if $a \leq A$} \\0, & \text{if $a > A$} \end{cases}\end{equation}$$
+
+meaning that all newborns are protected by maternal antibodies until a certain age A after which they instantaneously move to the susceptible class. We will refer to this assumption as the Type I maternal antibody assumption. Under this assumption, the proportion of susceptibles becomes
+
+$$s(a) = exp(-\intop_{A}^{a} \lambda(u) du),  \text{if $a > A$}$$
+
+where $\lambda(a)$ denotes the age-specific FOI, and $s(a) = 0$ if $a \leq A$
+
+Considering a large population of fixed size N with age-specific mortality rate $\mu(a)$ and with age density
+
+$$L^{-1} exp\{-\intop_{0}^{a} \mu(u) du\}$$
+
+Where $L$ is the life expectancy, $S(a')$ can be rewritten as $S(a') = N/L.s(a').m(a')$, where $s(a')$ and $m(a') = exp\{-\intop_{0}^{a}\mu(u) du\}$, denote the proportion susceptible and the survival function at age $a'$, respectively.
+
+Given the assumption of instantaneous loss of maternal immunity at age A, rewrite the age-specific FOI
+
+$$\lambda(a) = \frac{ND}{L} \intop_{A}^{\infty} \beta(a,a')\lambda(a')s(a')m(a')da', \text{for $a \geq A$}$$
+
+## The Discretized Mass Action Principle
+
+Assumming a constant FOI in each age class, denote the first age interval ($a_{[1]},a_{[2]}$) and the $j$th age interval $[a_{[j]},a_{[j+1]}$), j = 2,...,J, where $a_{[1]} = A$ and $a_{[J + 1]} = L$. The prevalence of immune individuals of age a in the jth age interval is now well approximated by 
+
+$$\pi(a) = 1 - exp(- \sum^{j-1}_{k=1} \lambda_k (a_{[k+1]} - a_{[k]}) - \lambda_j(a-a_{[j]}))$$
+
+Note that the prevalence of immune individuals is allowed to vary continuously
+with age and that we do not summarize the binary seroprevalence outcomes into a
+proportion per age class. Further, the FOI for age class i equals (i = 1,...,J):
+
+$$\lambda_i = \frac{ND}{L} \sum_{j=1}^{J} \beta_{ij} \frac{\lambda_i}{\lambda_j + \mu_j} [exp(-\sum_{k=1}^{j-1}(\lambda_k + \mu_k)(a_{[k+1]}-a_{[k]}))- exp(-\sum_{k=1}^{j}(\lambda_k + \mu_k)(a_{[k+1]}-a_{[k]}))] (14.10)$$
+
+where D denotes the mean duration of infectiousness and $\beta_{ij}$ the per capita rate at which an individual of age class j makes an effective contact with a person of age class i, per year. The transmission rates $\beta_{ij}$ make up a $J × J$ matrix, the so-called WAIFW matrix
+
+
+Specific structures, often used in literature, are homogeneous mixing, proportional mixing, separable mixing 
+
+::: columns
+::: {.column width="50%"}
+$$ W1 = \begin{pmatrix}\beta_1&\beta_6&\beta_6&\beta_6&\beta_6&\beta_6\\\beta_6&\beta_2&\beta_6&\beta_6&\beta_6&\beta_6\\\beta_6&\beta_6&\beta_3&\beta_6&\beta_6&\beta_6\\\beta_6&\beta_6&\beta_6&\beta_4&\beta_6&\beta_6\\\beta_6&\beta_6&\beta_6&\beta_6&\beta_5&\beta_6\\\beta_6&\beta_6&\beta_6&\beta_6&\beta_6&\beta_6\end{pmatrix} $$
+$$ W3 = \begin{pmatrix}\beta_1&\beta_1&\beta_1&\beta_4&\beta_5&\beta_6\\\beta_1&\beta_2&\beta_3&\beta_4&\beta_5&\beta_6\\\beta_1&\beta_3&\beta_3&\beta_4&\beta_5&\beta_6\\\beta_4&\beta_4&\beta_4&\beta_4&\beta_5&\beta_6\\\beta_5&\beta_5&\beta_5&\beta_5&\beta_5&\beta_6\\\beta_6&\beta_6&\beta_6&\beta_6&\beta_6&\beta_6\end{pmatrix} $$
+
+$$ W5 = \begin{pmatrix}\beta_1&\beta_6&\beta_6&\beta_6&\beta_6&\beta_6\\\beta_6&\beta_2&\beta_6&\beta_6&\beta_6&\beta_6\\\beta_6&\beta_6&\beta_3&\beta_6&\beta_6&\beta_6\\\beta_6&\beta_6&\beta_6&\beta_4&\beta_6&\beta_6\\\beta_6&\beta_6&\beta_6&\beta_6&\beta_5&\beta_6\\\beta_6&\beta_6&\beta_6&\beta_6&\beta_6&\beta_5\end{pmatrix} $$
+
+:::
+::: {.column width="50%"}
+$$ W2 = \begin{pmatrix}\beta_1&\beta_1&\beta_3&\beta_4&\beta_5&\beta_6\\\beta_1&\beta_2&\beta_3&\beta_4&\beta_5&\beta_6\\\beta_3&\beta_3&\beta_3&\beta_4&\beta_5&\beta_6\\\beta_4&\beta_4&\beta_4&\beta_4&\beta_5&\beta_6\\\beta_5&\beta_5&\beta_5&\beta_5&\beta_5&\beta_6\\\beta_6&\beta_6&\beta_6&\beta_6&\beta_6&\beta_6\end{pmatrix} $$
+
+$$ W4 = \begin{pmatrix}\beta_1&\beta_1&\beta_1&\beta_1&\beta_1&\beta_1\\\beta_2&\beta_2&\beta_2&\beta_2&\beta_2&\beta_2\\\beta_3&\beta_3&\beta_3&\beta_3&\beta_3&\beta_3\\\beta_4&\beta_4&\beta_4&\beta_4&\beta_4&\beta_4\\\beta_5&\beta_5&\beta_5&\beta_5&\beta_5&\beta_5\\\beta_6&\beta_6&\beta_6&\beta_6&\beta_6&\beta_6\end{pmatrix} $$
+
+$$ W6 = \begin{pmatrix}\beta_1&0&0&0&0&0&\\0&\beta_2&0&0&0&0&\\0&0&\beta_3&0&0&0&\\0&0&0&\beta_4&0&0&\\0&0&0&0&\beta_5&0&\\0&0&0&0&0&\beta_6\end{pmatrix} $$
+
+:::
+:::
+
+**What happen in the code**
+
+In order to estimate the transmission parameters $\beta = (\beta_1,...,\beta_6)^T$from seroprevalence data, book author follow [@anderson1991]. Since (14.10) constitutes a system of six equations and six unknowns, there exists a unique matrix $D(\lambda)$ such that (14.10) can be rewritten as $\lambda = D(\lambda) \beta$. Conditional on $D(\lambda)$ being invertible, the parameter vector $\beta$ can be estimated by fitting a piecewise constant FOI (in my cases used local polynomial) to the seroprevalence data and using $\widehat{\beta} = D(\widehat{\lambda})^{-1} \widehat{\lambda}$ . Whenever $\widehat{\beta} = D(\widehat{\lambda})^{-1} \widehat{\lambda} \geq 0$, one says that W has a **regular configuration** for the data.
+
+As an example, we now derive $D(\lambda)$ for W3. Denote
+
+$$\Psi_i = \frac{ND}{L} \frac{\lambda_i}{\lambda_j + \mu_j} [exp(-\sum_{k=1}^{j-1}(\lambda_k + \mu_k)(a_{[k+1]}-a_{[k]}))- exp(-\sum_{k=1}^{j}(\lambda_k + \mu_k)(a_{[k+1]}-a_{[k]}))]$$
+
+for $j = 1,...,J$, then $\lambda = D(\lambda) \beta$ can be rewritten as $\lambda = W \psi^T$. More specifically, given W3, $D(\lambda)$ looks like
+
+$$\begin{pmatrix}\sum_{j=1}^{3}\psi_j&0&0&\psi_4&\psi_5&\psi_6&\\\psi_1&\psi_2&\psi_3&\psi_4&\psi_5&\psi_6&\\\psi_1&0&\psi_2+\psi_3&\psi_4&\psi_5&\psi_6&\\0&0&0&\sum_{j=1}^{4}\psi_j&\psi_5&\psi_6&\\0&0&0&0&\sum_{j=1}^{5}\psi_j&\psi_6&\\0&0&0&0&0&\sum_{j=1}^{6}\psi_j\end{pmatrix} $$
+Similarly, $D(\lambda)$ can be derived for the other WAIFW structures.
+
+# WAIFW matrix for HFMD serology data
+
+</details>
+
+```{=html}
+<details>
+  <summary> Function for waifw matrix </summary>
+```
+
+```{r}
+waifw.6parms<-function(foihat=foihat,muhat=muhat,breaks=breakpoints,
+                       N=N,D=D,Lmax=Lmax){
+
+L <- Lmax*mean(exp(-cumsum(muhat*(floor(breaks)[-1]-
+                                  floor(breaks)[-length(breaks)]))))
+
+phi <- cumsum((foihat+muhat)*(breaks[-1]-breaks[-7]))
+psi <- N*D/L*foihat/(foihat+muhat)*(exp(-c(0,phi[-6]))-exp(-phi))
+psi[foihat+muhat==0]<-N*D/L*(exp(-c(0,phi[-6]))-exp(-phi))[foihat+muhat==0]
+
+My<-My[0:6]
+
+## W1
+message1<-c("Regular Configuration")
+beta<-rep(NA,6);R0vec<-NA;bij<-NA
+Dij<-t(matrix(c(
+  psi[1],0,0,0,0,sum(psi[-1]),
+  0,psi[2],0,0,0,sum(psi[-2]),
+  0,0,psi[3],0,0,sum(psi[-3]),
+  0,0,0,psi[4],0,sum(psi[-4]),
+  0,0,0,0,psi[5],sum(psi[-5]),
+  0,0,0,0,0,sum(psi[1:6])),ncol=6))
+if(det(Dij)!=0){
+  beta<-solve(Dij,foihat)
+  if(sum(beta<0)>0){message1<-c("D(lambda)lambda is irregular")}
+  if(sum(beta<0)==0){
+    bij<-matrix(beta[6],nrow=6,ncol=6)
+    bij[1:breaks[2],1:breaks[2]]<-beta[1]
+    bij[(breaks[2]+1):breaks[3],(breaks[2]+1):breaks[3]]<-beta[2]
+    bij[(breaks[3]+1):breaks[4],(breaks[3]+1):breaks[4]]<-beta[3]
+    bij[(breaks[4]+1):breaks[5],(breaks[4]+1):breaks[5]]<-beta[4]
+    bij[(breaks[5]+1):breaks[6],(breaks[5]+1):breaks[6]]<-beta[5]
+    bij[(breaks[6]+1):breaks[7],(breaks[6]+1):breaks[7]]<-beta[6]
+    R0ij<-(N/L)*D*bij[1:6,1:6]
+    Mij<-diag(c(My))
+    R0vec<-as.double(eigen(Mij%*%R0ij,symmetric=FALSE,only.values=TRUE,EISPACK=FALSE)$values)
+  }}
+if (det(Dij)==0){message1<-c("D(lambda) is not invertible")}
+beta1<-beta;R0vec1<-R0vec;bij1<-bij
+
+## w2
+message2<-c("Regular Configuration")
+beta<-rep(NA,6);R0vec<-NA;bij<-NA
+Dij<-t(matrix(c(
+  sum(psi[1:2]),0,psi[3],psi[4],psi[5],psi[6],
+  psi[1],psi[2],psi[3],psi[4],psi[5],psi[6],
+  0,0,sum(psi[1:3]),psi[4],psi[5],psi[6],
+  0,0,0,sum(psi[1:4]),psi[5],psi[6],
+  0,0,0,0,sum(psi[1:5]),psi[6],
+  0,0,0,0,0,sum(psi[1:6])),ncol=6))
+if(det(Dij)!=0){
+  beta<-solve(Dij,foihat)
+  if(sum(beta<0)>0){message2<-c("D(lambda)lambda is irregular")}
+  if(sum(beta<0)==0){
+    bij<-matrix(NA,ncol=6,nrow=6)
+    bij[1:breaks[3],1:breaks[2]]<-beta[1]
+    bij[1:breaks[2],(breaks[2]+1):breaks[3]]<-beta[1]
+    bij[(breaks[2]+1):breaks[3],(breaks[2]+1):breaks[3]]<-beta[2]
+    bij[1:breaks[4],(breaks[3]+1):breaks[4]]<-beta[3]
+    bij[(breaks[3]+1):breaks[4],1:breaks[4]]<-beta[3]
+    bij[1:breaks[5],(breaks[4]+1):breaks[5]]<-beta[4]
+    bij[(breaks[4]+1):breaks[5],1:breaks[5]]<-beta[4]
+    bij[1:breaks[6],(breaks[5]+1):breaks[6]]<-beta[5]
+    bij[(breaks[5]+1):breaks[6],1:breaks[6]]<-beta[5]
+    bij[1:breaks[7],(breaks[6]+1):breaks[7]]<-beta[6]
+    bij[(breaks[6]+1):breaks[7],1:breaks[7]]<-beta[6]
+    R0ij<-(N/L)*D*bij[1:6,1:6]
+    Mij<-diag(c(My))
+    R0vec<-as.double(eigen(Mij%*%R0ij,symmetric=FALSE,only.values=TRUE,EISPACK=FALSE)$values)
+  }}
+if (det(Dij)==0){message2<-c("D(lambda) is not invertible")}
+beta2<-beta;R0vec2<-R0vec;bij2<-bij
+
+## w3
+beta<-rep(NA,6);R0vec<-NA;bij<-NA
+Dij<-t(matrix(c(
+  sum(psi[1:3]),0,0,psi[4],psi[5],psi[6],
+  psi[1],psi[2],psi[3],psi[4],psi[5],psi[6],
+  psi[1],0,sum(psi[2:3]),psi[4],psi[5],psi[6],
+  0,0,0,sum(psi[1:4]),psi[5],psi[6],
+  0,0,0,0,sum(psi[1:5]),psi[6],
+  0,0,0,0,0,sum(psi[1:6])),ncol=6))
+
+if(det(Dij)!=0){
+  beta<-solve(Dij,foihat)
+  if(sum(beta<0)>0){message3<-c("D(lambda)lambda is irregular")}
+  if(sum(beta<0)==0){
+    bij<-matrix(NA,ncol=6,nrow=6)
+    bij[1:breaks[4],1:breaks[2]]<-beta[1]
+    bij[1:breaks[2],1:breaks[4]]<-beta[1]
+    bij[(breaks[2]+1):breaks[3],(breaks[2]+1):breaks[3]]<-beta[2]
+    bij[(breaks[2]+1):breaks[4],(breaks[3]+1):breaks[4]]<-beta[3]
+    bij[(breaks[3]+1):breaks[4],(breaks[2]+1):breaks[4]]<-beta[3]
+    bij[1:breaks[5],(breaks[4]+1):breaks[5]]<-beta[4]
+    bij[(breaks[4]+1):breaks[5],1:breaks[5]]<-beta[4]
+    bij[1:breaks[6],(breaks[5]+1):breaks[6]]<-beta[5]
+    bij[(breaks[5]+1):breaks[6],1:breaks[6]]<-beta[5]
+    bij[1:breaks[7],(breaks[6]+1):breaks[7]]<-beta[6]
+    bij[(breaks[6]+1):breaks[7],1:breaks[7]]<-beta[6]
+    R0ij<-(N/L)*D*bij[1:6,1:6]
+    Mij<-diag(c(My))
+    R0vec<-as.double(eigen(Mij%*%R0ij,symmetric=FALSE,only.values=TRUE,EISPACK=FALSE)$values)
+  }}
+if (det(Dij)==0){message3<-c("D(lambda) is not invertible")}
+beta3<-beta;R0vec3<-R0vec;bij3<-bij
+
+## w4
+message4<-c("Regular Configuration")
+beta<-rep(NA,6);R0vec<-NA;bij<-NA
+Dij<-t(matrix(c(
+  sum(psi[1:6]),0,0,0,0,0,
+  0,sum(psi[1:6]),0,0,0,0,
+  0,0,sum(psi[1:6]),0,0,0,
+  0,0,0,sum(psi[1:6]),0,0,
+  0,0,0,0,sum(psi[1:6]),0,
+  0,0,0,0,0,sum(psi[1:6])),ncol=6))
+if(det(Dij)!=0){
+  beta<-solve(Dij,foihat)
+  if(sum(beta<0)>0){message4<-c("D(lambda)lambda is irregular")}
+  if(sum(beta<0)==0){
+    bij<-matrix(NA,ncol=6,nrow=6)
+    bij[1:breaks[2],1:breaks[7]]<-beta[1]
+    bij[(breaks[2]+1):breaks[3],1:breaks[7]]<-beta[2]
+    bij[(breaks[3]+1):breaks[4],1:breaks[7]]<-beta[3]
+    bij[(breaks[4]+1):breaks[5],1:breaks[7]]<-beta[4]
+    bij[(breaks[5]+1):breaks[6],1:breaks[7]]<-beta[5]
+    bij[(breaks[6]+1):breaks[7],1:breaks[7]]<-beta[6]
+    R0ij<-(N/L)*D*bij[1:6,1:6]
+    Mij<-diag(c(My))
+    R0vec<-as.double(eigen(Mij%*%R0ij,symmetric=FALSE,only.values=TRUE,EISPACK=FALSE)$values)
+  }}
+if (det(Dij)==0){message4<-c("D(lambda) is not invertible")}
+beta4<-beta;R0vec4<-R0vec;bij4<-bij
+
+## W5
+message5<-c("Regular Configuration")
+beta<-rep(NA,6);R0vec<-NA;bij<-NA
+Dij<-t(matrix(c(
+  psi[1],0,0,0,0,sum(psi[-1]),
+  0,psi[2],0,0,0,sum(psi[-2]),
+  0,0,psi[3],0,0,sum(psi[-3]),
+  0,0,0,psi[4],0,sum(psi[-4]),
+  0,0,0,0,psi[5],sum(psi[-5]),
+  0,0,0,0,psi[6],sum(psi[1:5])),ncol=6))
+if(det(Dij)!=0){
+  beta<-solve(Dij,foihat)
+  if(sum(beta<0)>0){message5<-c("D(lambda)lambda is irregular")}
+  if(sum(beta<0)==0){
+    bij<-matrix(beta[6],ncol=6,nrow=6)
+    bij[1:breaks[2],1:breaks[2]]<-beta[1]
+    bij[(breaks[2]+1):breaks[3],(breaks[2]+1):breaks[3]]<-beta[2]
+    bij[(breaks[3]+1):breaks[4],(breaks[3]+1):breaks[4]]<-beta[3]
+    bij[(breaks[4]+1):breaks[5],(breaks[4]+1):breaks[5]]<-beta[4]
+    bij[(breaks[5]+1):breaks[6],(breaks[5]+1):breaks[6]]<-beta[5]
+    bij[(breaks[6]+1):breaks[7],(breaks[6]+1):breaks[7]]<-beta[5]
+    R0ij<-(N/L)*D*bij[1:6,1:6]
+    Mij<-diag(c(My))
+    R0vec<-as.double(eigen(Mij%*%R0ij,symmetric=FALSE,only.values=TRUE,EISPACK=FALSE)$values)
+  }}
+if (det(Dij)==0){message5<-c("D(lambda) is not invertible")}
+beta5<-beta;R0vec5<-R0vec;bij5<-bij
+
+# W6
+######
+message6<-c("Regular Configuration")
+beta<-rep(NA,6);R0vec<-NA;bij<-NA
+Dij<-t(matrix(c(
+  psi[1],0,0,0,0,0,
+  0,psi[2],0,0,0,0,
+  0,0,psi[3],0,0,0,
+  0,0,0,psi[4],0,0,
+  0,0,0,0,psi[5],0,
+  0,0,0,0,0,psi[6]),ncol=6))
+if(det(Dij)!=0){
+  beta<-solve(Dij,foihat)
+  if(sum(beta<0)>0){message6<-c("D(lambda)lambda is irregular")}^T
+  if(sum(beta<0)==0){
+    bij<-matrix(0,ncol=6,nrow=6)
+    bij[1:breaks[2],1:breaks[2]]<-beta[1]
+    bij[(breaks[2]+1):breaks[3],(breaks[2]+1):breaks[3]]<-beta[2]
+    bij[(breaks[3]+1):breaks[4],(breaks[3]+1):breaks[4]]<-beta[3]
+    bij[(breaks[4]+1):breaks[5],(breaks[4]+1):breaks[5]]<-beta[4]
+    bij[(breaks[5]+1):breaks[6],(breaks[5]+1):breaks[6]]<-beta[5]
+    bij[(breaks[6]+1):breaks[7],(breaks[6]+1):breaks[7]]<-beta[6]
+    R0ij<-(N/L)*D*bij[1:6,1:6]
+    Mij<-diag(c(My))
+    R0vec<-as.double(eigen(Mij%*%R0ij,symmetric=FALSE,only.values=TRUE,EISPACK=FALSE)$values)
+    c(round(max(R0vec),3))
+  }}
+if (det(Dij)==0){message6<-c("D(lambda) is not invertible")}
+beta6<-beta;R0vec6<-R0vec;bij6<-bij
+
+return(
+  list(w1=list(message=message1,beta=beta1,R0hat=max(R0vec1),bij=bij1,L=L,N=N,D=D),
+     w2=list(message=message2,beta=beta2,R0hat=max(R0vec2),bij=bij2,L=L,N=N,D=D),
+     w3=list(message=message3,beta=beta3,R0hat=max(R0vec3),bij=bij3,L=L,N=N,D=D),
+     w4=list(message=message4,beta=beta4,R0hat=max(R0vec4),bij=bij4,L=L,N=N,D=D),
+     w5=list(message=message5,beta=beta5,R0hat=max(R0vec5),bij=bij5,L=L,N=N,D=D),
+     w6=list(message=message6,beta=beta6,R0hat=max(R0vec6),bij=bij6,L=L,N=N,D=D)))
+}
+```
+
+</details>
+
+</details>
+
+```{=html}
+<details>
+  <summary> Function to plot WAIFW matrix </summary>
+```
+
+```{r}
+plot_waifw <- function(data){
+  data %>% as_tibble() %>%
+    rownames_to_column("Var1")  %>%
+    pivot_longer(-Var1, names_to = "Var2", values_to = "value") %>%
+    mutate(
+      Var1 = factor(Var1, levels = 1:6,
+                    labels=c('[0-1]','(1-2]','(2-3]','(3-4]','(4-5]','(5-6]')),
+      Var2 = factor(gsub("V", "", Var2), levels = 1:6,
+                    labels=c('[0-1]','(1-2]','(2-3]','(3-4]','(4-5]','(5-6]'))
+    ) %>%
+    ggplot(aes(Var2, Var1)) +
+    geom_tile(aes(fill = value)) +
+    labs(x = "Age group", y = "Age group")+
+    # geom_text(aes(label = round(value, 1))) +
+    scale_fill_gradient(low = "white", high = "red")
+}
+```
+
+</details>
+
+</details>
+
+```{=html}
+<details>
+  <summary> Parameters </summary>
+```
+
+```{r}
+## age - class
+breakpoints <- c(0,1,2,3,4,5,6)
+## mean duration of infectious
+D=14/365
+## life expectancy
+Lmax=81
+# Age of loss of maternal immunity (0<A<1)
+A <- 0.5
+```
+
+```{r}
+## population
+census2019 <- readRDS("D:/OUCRU/hfmd/data/census2019.rds")
+hcm19 <- census2019 %>% filter(province == "Thành phố Hồ Chí Minh") %>%
+          as.data.frame()
+
+hcm_age19 <- hcm19 %>% group_by(age) %>% summarise(total = sum(n)) %>%
+  as.data.frame()
+
+hcm_age19$age2 <- as.numeric(word(hcm_age19$age,1))
+hcm_age19 <- arrange(hcm_age19,age2)
+```
+
+```{r}
+## ND: number of death  (data of Belgium in the book)
+## AGE: age (data from 2019 census)
+## PS: population (data from 2019 census)
+ND <- c(489,47,29,21,12,12,16,15,15,6,6,14,17,19,17,23,34,33,62,71,68,68,78,71,71,96,86,83,79,80,83,93,126,120,121,132,135,176,161,193,196,218,257,277,331,376,356,435,460,453,535,545,576,668,692,759,722,819,939,1015,1051,973,1113,996,940,1074,1252,1367,1468,1541,1661,1838,2012,2236,2517,2793,2938,2994,3311,3516,3727,3857,4088,4161,4261,4274,4061,2509,2049,2159,2205,2550,2330,1992,1569,1242,1000,726,533,996)
+ND2 <- ND[1:length(hcm_age19$age2)]
+PS <- hcm_age19[1:length(hcm_age19$age2),2]
+AGE <- c(1:(length(ND2)))
+N <- sum(PS)
+list(ND2,PS,AGE,N)
+```
+
+```{r}
+library(mgcv)
+# Survival function
+demfit<-gam(ND2~s(AGE),offset=log(PS),family="poisson",link="log")
+muy<-predict(demfit,type="response")
+My<-exp(-cumsum(muy))
+
+muhat<-rep(NA,(length(breakpoints)-1))
+for (i in 1:(length(breakpoints)-1)){
+  muhat[i]<-mean(muy[(floor(breakpoints)[i]+1):(floor(breakpoints)[i+1])])
+}
+```
+
+</details>
+
+## December 2022
+
+</details>
+
+```{=html}
+<details>
+  <summary> Fitting </summary>
+```
+```{r}
+waifw6.fit1222 <- waifw.6parms(foihat=lp_fit1222$foi[1:6],muhat=muhat,
+                              breaks=breakpoints,
+                              N=N,D=D,Lmax=6)
+waifw6.fit1222
+```
+
+</details>
+
+::: columns
+::: {.column width="50%"}
+```{r}
+plot_waifw(waifw6.fit1222$w4$bij)
+```
+:::
+
+::: {.column width="50%"}
+```{r}
+plot_waifw(waifw6.fit1222$w6$bij)
+```
+:::
+:::
+
+## April 2023
+
+</details>
+
+```{=html}
+<details>
+  <summary> Fitting </summary>
+```
+```{r}
+waifw6.fit423 <- waifw.6parms(foihat=lp_fit423$foi[1:6],muhat=muhat,
+                              breaks=breakpoints,
+                              N=N,D=D,Lmax=6)
+waifw6.fit423
+```
+
+</details>
+
+::: columns
+::: {.column width="50%"}
+```{r}
+plot_waifw(waifw6.fit423$w4$bij)
+```
+:::
+
+::: {.column width="50%"}
+```{r}
+plot_waifw(waifw6.fit423$w6$bij)
+```
+:::
+:::
+
+## August 2023
+
+</details>
+
+```{=html}
+<details>
+  <summary> Fitting </summary>
+```
+```{r}
+waifw6.fit823 <- waifw.6parms(foihat=lp_fit423$foi[1:6],muhat=muhat,
+                              breaks=breakpoints,
+                              N=N,D=D,Lmax=6)
+waifw6.fit823
+```
+
+</details>
+
+::: columns
+::: {.column width="50%"}
+```{r}
+plot_waifw(waifw6.fit823$w4$bij)
+```
+:::
+
+::: {.column width="50%"}
+```{r}
+plot_waifw(waifw6.fit823$w6$bij)
+```
+:::
+:::
+
+## December 2023
+
+</details>
+
+```{=html}
+<details>
+  <summary> Fitting </summary>
+```
+```{r}
+waifw6.fit1223 <- waifw.6parms(foihat=lp_fit1223$foi[1:6],muhat=muhat,
+                              breaks=breakpoints,
+                              N=N,D=D,Lmax=6)
+waifw6.fit1223
+```
+
+</details>
+
+::: columns
+::: {.column width="50%"}
+```{r}
+plot_waifw(waifw6.fit1223$w4$bij)
+```
+:::
+
+::: {.column width="50%"}
+```{r}
+plot_waifw(waifw6.fit1223$w6$bij)
+```
+:::
+:::
+
+W4 structure corresponds to the situation where transmissions rate depend only on the age of the susceptible, $\beta(a,a') = \beta(a)$ [@anderson1991]
+
+W6 structure corresponds to the transmissions process being primarily from contacts within age group
+
+
+
